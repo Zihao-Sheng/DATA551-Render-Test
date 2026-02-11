@@ -21,10 +21,10 @@
 - [ ] **Team Work Contract**  
   Define how the team will collaborate, distribute work, communicate, and resolve conflicts in a shared team contract document.
 
-- [ ] **Code of Conduct**  
+- [x] **Code of Conduct**  
   Include a code of conduct describing expected behavior, inclusivity, and how to report unacceptable behavior.
 
-- [ ] **Contribution Guidelines**  
+- [x] **Contribution Guidelines**  
   Add contribution guidelines explaining how others can report issues or contribute to the project.
 
 - [ ] **Milestone 1 Release & Canvas Submission**  
