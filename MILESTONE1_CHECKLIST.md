@@ -1,6 +1,6 @@
 # Milestone 1 – Dashboard Proposal Checklist
 
-- [ ] **Repository Setup**  
+- [x] **Repository Setup**  
   Public GitHub repository is created under the UBC-MDS organization with a proper project name and **open-source license**, and basic project files initialized.
 
 - [ ] **Proposal: Motivation & Purpose**  
