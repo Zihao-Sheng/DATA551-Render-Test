@@ -1,14 +1,14 @@
 # data (do not upload Kaggle files)
-data/
-!data/README.md
-!data/raw/.gitkeep
-!data/processed/.gitkeep
+# data/
+# !data/README.md
+# !data/raw/.gitkeep
+# !data/processed/.gitkeep
 
 # Python bytecode
 __pycache__/
 *.py[cod]
 *$py.class
-
+    
 # C extensions
 *.so
 
