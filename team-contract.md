@@ -15,8 +15,17 @@ This project started on Monday, February 9, 2026.
 * We try to reply within 24 hours.
 
 ## Meetings
-* We will meet weekly on Thursdays.
+* We will meet weekly on Thursdays at 6 PM PST.
+* We will rotate the responsibility for creating the meeting agenda and taking minutes each week.
 * If someone cannot make it, please let the team know early.
+
+## Work Process and Fairness
+* We will break the project into tasks and assign them fairly based on team member skills and availability.
+* We expect high-quality work and will review each other's code to ensure it meets our standards.
+
+## Work Hours
+* We expect to work on this project for about 5-8 hours per week each.
+* We will try to avoid working on Sundays due to family obligations.
 
 ## Git Workflow
 * All code changes must be done on a new branch, not directly to main.
@@ -31,3 +40,4 @@ This project started on Monday, February 9, 2026.
 ## Conflict Resolution
 1. Talk directly to the team member.
 2. If it is not solved, bring it to the team meeting.
+3. If it is still not solved, ask the TA for help.
