@@ -22,7 +22,7 @@ By offering interactive visualizations instead of a single static chart, the das
 
 ## 2. Description of the Data
 
-We will use the public [Spotify Tracks Dataset](https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset/data) compiled by Maharshi Pandya and hosted on Kaggle. The dataset contains approximately 114,000 tracks spanning about 125 genres, each with a set of Spotify audio features and basic metadata.
+We will use the public [Spotify Tracks Dataset](https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset) compiled by Maharshi Pandya and hosted on Kaggle. The dataset contains approximately 114,000 tracks spanning about 125 genres, each with a set of Spotify audio features and basic metadata.
 
 Each row represents a single track and includes:
 
