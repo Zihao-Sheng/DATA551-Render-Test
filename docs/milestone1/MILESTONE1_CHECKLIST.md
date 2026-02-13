@@ -12,7 +12,7 @@
 - [x] **Proposal: Research Questions & Usage Scenarios**  
   Formulate the main research questions and describe how a target user would interact with the dashboard to answer them.
 
-- [ ] **App Description (README)**  
+- [x] **App Description (README)**  
   Provide a high-level description of the planned dashboard interface, key views, interactions, and user flow in about 200–300 words.
 
 - [x] **Dashboard Sketch**  
@@ -27,7 +27,7 @@
 - [x] **Contribution Guidelines**  
   Add contribution guidelines explaining how others can report issues or contribute to the project.
 
-- [ ] **Milestone 1 Release & Canvas Submission**  
+- [x] **Milestone 1 Release & Canvas Submission**  
   Add the release link to `canvas-submission.md` for Canvas submission.
 
 - [x] **Optional: Initial App Scaffold**  
