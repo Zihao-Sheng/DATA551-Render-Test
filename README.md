@@ -8,7 +8,6 @@ An interactive dashboard for exploring how audio features, genres, and moods rel
 - Richard Hua  
 - Yihang Wang  
 
----
 
 ## Project Overview
 
@@ -16,7 +15,6 @@ In this project, we take the role of a data analytics group within a music-strea
 
 Our goal is to build a dashboard that lets users visually explore how genres and moods relate to track popularity, compare the audio profiles of different regions of the catalogue, and identify tracks that look promising from an audio-feature perspective but are not yet very popular. The final app is intended to support both playful exploration and practical decision-making for playlist strategy and marketing campaigns.
 
----
 
 ## Data
 
@@ -36,7 +34,6 @@ We also derive additional variables such as:
 
 **Data source:** [Spotify Tracks Dataset](https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset) by Maharshi Pandya on Kaggle.
 
----
 
 ## App Description & Sketch
 
@@ -54,7 +51,6 @@ View the dashboard sketch here:
 
 [Dashboard sketch PDF](./docs/milestone1/dashboard-sketch.pdf)  
 
----
 
 ## Repository Structure
 
@@ -82,8 +78,6 @@ DATA-551-GROUP-7/
 └── team-contract.md
 ``` 
 
----
-
 ## Contributing & Code of Conduct
 
 Please see:
@@ -91,7 +85,6 @@ Please see:
 - `CONTRIBUTING.md` for how to report issues and propose changes  
 - `CODE_OF_CONDUCT.md` for community expectations and reporting procedures  
 
----
 
 ## License
 This project is licensed under the MIT License.
