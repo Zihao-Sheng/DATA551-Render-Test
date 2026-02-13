@@ -2,7 +2,6 @@
 **Project title:** Spotify Track Insights Explorer  
 **Group 7 Members:** Jingtao Yang, Zihao Sheng, Richard Hua, Yihang Wang
 
----
 
 ## 1. Motivation and Purpose
 
@@ -18,7 +17,6 @@ In short, the app aims to:
 
 By offering interactive visualizations instead of a single static chart, the dashboard is intended to encourage playful exploration while still supporting serious decision-making for playlist strategy and marketing campaigns.
 
----
 
 ## 2. Description of the Data
 
@@ -59,7 +57,6 @@ We plan to derive a small set of additional variables, such as:
 - `tempo_band` (slow, medium, fast)
 - `mood_quadrant` based on the combination of energy and valence
 
----
 
 ## 3. Research Questions and Usage Scenarios
 
