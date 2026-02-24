@@ -1,21 +1,23 @@
-from dash import Dash, html, dcc, Input, Output
+# app.py
+from dash import Dash, html, dcc, Input, Output, callback, ctx, no_update
 import pandas as pd
 from pathlib import Path
+import dash_vega_components as dvc
 
 from charts.scatter import make_scatter
-from filter import filter_tracks  # <- 同级 filter.py
+from filter import filter_tracks
+from charts.song_list import make_song_list_table
 
-
-# importing data, note that this is raw data for now
+# ---------------- Data ----------------
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "raw" / "dataset.csv"
 data = pd.read_csv(DATA_PATH)
 
-# initializing app
+# ---------------- App ----------------
 app = Dash(__name__)
 server = app.server  # for deployment later
 
-# style setters
+# ---------------- Styles ----------------
 PAGE = {
     "fontFamily": "system-ui, -apple-system, Segoe UI, Roboto, Arial",
     "backgroundColor": "#f6f7f6",
@@ -56,40 +58,34 @@ PLACEHOLDER = {
     "fontSize": "14px",
 }
 
-# ---- constants for sliders ----
+
+# ---------------- Filter constants ----------------
 TEMPO_MIN, TEMPO_MAX = 0, 250
 POP_MIN, POP_MAX = 0, 100
 
-# show a manageable genre list in the sidebar (top N by frequency)
+# Left sidebar genre options (top N by frequency for usability)
 TOP_GENRE_OPTIONS = list(data["track_genre"].value_counts().head(12).index)
 GENRE_OPTIONS = [{"label": g, "value": g} for g in TOP_GENRE_OPTIONS]
 
-
-def _bounds_to_set(bounds, min_v, max_v):
-    """Convert slider [lo, hi] into {lo_or_None, hi_or_None} for filter_tracks()."""
-    lo, hi = bounds
-    lo_out = None if lo == min_v else lo
-    hi_out = None if hi == max_v else hi
-    return {lo_out, hi_out}
-
-
-# all placeholders should eventually be replaced by features
+# ---------------- Layout ----------------
 app.layout = html.Div(
     style=PAGE,
     children=[
         # Header
         html.Div(
             style=HEADER,
-            children=[
-                html.H3("Playlist Editor Dashboard", style={"margin": 0}),
-            ],
+            children=[html.H3("Playlist Editor Dashboard", style={"margin": 0})],
         ),
 
-        # GRID Structure
+        # Stores for brush bounds + selected rows (full filtered selection)
+        dcc.Store(id="brush-bounds-store"),
+        dcc.Store(id="selected-data-store"),
+
+        # GRID
         html.Div(
             style=GRID,
             children=[
-                # ---------------- Left Column ----------------
+                # -------- Left column (Filters) --------
                 html.Div(
                     style=CARD,
                     children=[
@@ -97,15 +93,16 @@ app.layout = html.Div(
                             [
                                 html.Div("Filters", style={"fontWeight": 700, "marginBottom": "10px"}),
 
-                                # Search
-                                html.Div("Search Tracks", style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"}),
+                                html.Div(
+                                    "Search Tracks",
+                                    style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"},
+                                ),
                                 dcc.Input(
                                     id="keyword",
                                     type="text",
                                     placeholder="Type a keyword…",
                                     style={
                                         "width": "100%",
-                                        "height": "100%",
                                         "padding": "10px 12px",
                                         "borderRadius": "10px",
                                         "border": "1px solid #e9e9ef",
@@ -114,8 +111,10 @@ app.layout = html.Div(
                                     },
                                 ),
 
-                                # Genre checklist
-                                html.Div("Genre", style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"}),
+                                html.Div(
+                                    "Genre",
+                                    style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"},
+                                ),
                                 dcc.Checklist(
                                     id="genre",
                                     options=GENRE_OPTIONS,
@@ -128,8 +127,10 @@ app.layout = html.Div(
                                     style={"fontSize": "11px", "color": "#888", "marginTop": "6px", "marginBottom": "14px"},
                                 ),
 
-                                # Explicit radio
-                                html.Div("Explicit Content", style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"}),
+                                html.Div(
+                                    "Explicit Content",
+                                    style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"},
+                                ),
                                 dcc.RadioItems(
                                     id="explicit",
                                     options=[
@@ -142,8 +143,10 @@ app.layout = html.Div(
                                     labelStyle={"display": "flex", "alignItems": "center", "gap": "8px"},
                                 ),
 
-                                # Tempo range slider
-                                html.Div("Tempo", style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"}),
+                                html.Div(
+                                    "Tempo",
+                                    style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"},
+                                ),
                                 dcc.RangeSlider(
                                     id="tempo-range",
                                     min=TEMPO_MIN,
@@ -154,8 +157,10 @@ app.layout = html.Div(
                                 ),
                                 html.Div(style={"height": "14px"}),
 
-                                # Popularity range slider
-                                html.Div("Popularity", style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"}),
+                                html.Div(
+                                    "Popularity",
+                                    style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"},
+                                ),
                                 dcc.RangeSlider(
                                     id="popularity-range",
                                     min=POP_MIN,
@@ -165,7 +170,6 @@ app.layout = html.Div(
                                     tooltip={"placement": "bottom", "always_visible": False},
                                 ),
 
-                                # (Optional) a tiny hint row at bottom
                                 html.Div(
                                     id="filter-hint",
                                     style={"fontSize": "11px", "color": "#888", "marginTop": "12px"},
@@ -175,16 +179,15 @@ app.layout = html.Div(
                     ],
                 ),
 
-                # ---------------- Middle Column ----------------
+                # -------- Middle column --------
                 html.Div(
                     children=[
-                        # Scatter Card
                         html.Div(
                             style={**CARD, "marginBottom": "16px"},
                             children=[
                                 html.H4("Track Overview", style={"marginTop": 0}),
 
-                                # toolbox: brush vs pan/zoom
+                                # Toolbox button (radio toggle)
                                 dcc.RadioItems(
                                     id="toolbox-mode",
                                     options=[
@@ -196,13 +199,11 @@ app.layout = html.Div(
                                     style={"fontSize": "12px", "color": "#444", "marginBottom": "6px"},
                                 ),
 
-                                # meta info line
                                 html.Div(
                                     id="scatter-meta",
                                     style={"fontSize": "12px", "color": "#666", "marginBottom": "8px"},
                                 ),
 
-                                # Square container for scatter
                                 html.Div(
                                     style={
                                         "width": "100%",
@@ -212,29 +213,33 @@ app.layout = html.Div(
                                         "background": "#fff",
                                     },
                                     children=[
-                                        html.Iframe(
+                                        dvc.Vega(
                                             id="scatter",
-                                            srcDoc="",
-                                            style={"width": "100%", "height": "100%", "border": "0"},
+                                            spec={},  # filled by callback
+                                            opt={"renderer": "svg", "actions": False},
+                                            signalsToObserve=["brush_selection"],
+                                            style={"width": "100%", "height": "100%"},
                                         )
                                     ],
                                 ),
                             ],
                         ),
 
-                        # Below scatter placeholders
                         html.Div(
                             "Distribution Plot Placeholder",
                             style={**PLACEHOLDER, "height": "320px", "marginBottom": "16px"},
                         ),
                         html.Div(
-                            "Song List Placeholder",
-                            style={**PLACEHOLDER, "height": "320px"},
+                            style={**CARD, "marginBottom": "16px"},
+                            children=[
+                                html.H4("Track List", style={"marginTop": 0}),
+                                html.Div(id="song-list-container"),
+                            ],
                         ),
                     ],
                 ),
 
-                # ---------------- Right Column ----------------
+                # -------- Right column --------
                 html.Div(
                     style=CARD,
                     children=[
@@ -247,28 +252,33 @@ app.layout = html.Div(
     ],
 )
 
-
-@app.callback(
-    Output("scatter", "srcDoc"),
+# ---------------- Callbacks ----------------
+@callback(
+    Output("scatter", "spec"),
     Output("scatter-meta", "children"),
     Output("filter-hint", "children"),
+    Output("brush-bounds-store", "data"),
+    Output("selected-data-store", "data"),
     Input("toolbox-mode", "value"),
     Input("keyword", "value"),
     Input("genre", "value"),
     Input("explicit", "value"),
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
+    Input("scatter", "signalData"),
 )
-def update_scatter(mode, keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds):
-    # map explicit selector -> bool/None for filter_tracks()
+def update_scatter_and_selection(
+    mode, keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds, signal_data
+):
+    # ---- explicit mapping ----
     if explicit_mode == "explicit":
         explicit_val = True
     elif explicit_mode == "clean":
         explicit_val = False
     else:
-        explicit_val = None  # include both
+        explicit_val = None
 
-    # convert sliders -> {lo_or_None, hi_or_None}
+    # ---- slider -> [lo_or_None, hi_or_None] ----
     tempo_range = [
         None if tempo_bounds[0] == TEMPO_MIN else tempo_bounds[0],
         None if tempo_bounds[1] == TEMPO_MAX else tempo_bounds[1],
@@ -277,11 +287,12 @@ def update_scatter(mode, keyword, genre_values, explicit_mode, tempo_bounds, pop
         None if pop_bounds[0] == POP_MIN else pop_bounds[0],
         None if pop_bounds[1] == POP_MAX else pop_bounds[1],
     ]
-    # genres list -> set (or None)
+
+    # ---- genre list -> set/None ----
     genre_set = set(genre_values) if genre_values else None
 
-    # apply filtering using your function in filter.py
-    filtered = filter_tracks(
+    # ---- full filtered data ----
+    filtered_df = filter_tracks(
         data,
         keyword=keyword,
         genres=genre_set,
@@ -291,28 +302,82 @@ def update_scatter(mode, keyword, genre_values, explicit_mode, tempo_bounds, pop
         copy=False,
     )
 
-    # build chart (make_scatter will also downsample if too many points)
-    chart, meta = make_scatter(
-        filtered,
-        mode=mode,
-        max_points=500,
-        topk_genres=10,
-        width=520,
-        height=400,
+    triggered = ctx.triggered_id
+
+    # ---- parse brush bounds ----
+    brush = (signal_data or {}).get("brush_selection")
+    if brush and "energy" in brush and "valence" in brush:
+        e0, e1 = brush["energy"]
+        v0, v1 = brush["valence"]
+        bounds = {"energy": [e0, e1], "valence": [v0, v1]}
+
+        selected_df = filtered_df[
+            (filtered_df["energy"] >= e0)
+            & (filtered_df["energy"] <= e1)
+            & (filtered_df["valence"] >= v0)
+            & (filtered_df["valence"] <= v1)
+        ]
+    else:
+        bounds = None
+        selected_df = filtered_df
+
+    filter_hint = f"Filtered: {len(filtered_df)} tracks"
+
+    n_total = len(filtered_df)
+    n_shown = min(n_total, 500)
+    sampled = n_total > 500
+
+    meta_text = (
+        f"Plotted: {n_shown} of {n_total} tracks"
+        + (" (sampled)" if sampled else "")
+        + f" · Mode: {'Brush' if mode == 'brush' else 'Pan/Zoom'}"
+        + f" · Selected: {len(selected_df)}"
     )
 
-    # meta text shown above scatter
-    meta_text = f"Showing {meta['n_shown']} of {meta['n_total']} tracks"
-    if meta["sampled"]:
-        meta_text += " (sampled for performance)"
-    meta_text += f" · Colored by Top {meta['topk_genres']} genres + Other"
-    meta_text += " · Mode: Brush" if mode == "brush" else " · Mode: Pan/Zoom"
+    # IMPORTANT: don't redraw spec when brushing
+    if triggered == "scatter":
+        spec_out = no_update
+    else:
+        chart, _meta = make_scatter(
+            filtered_df,
+            mode=mode,
+            max_points=500,
+            topk_genres=10,
+            selection_name="brush_selection",
+            width=520,
+            height=400,
+        )
+        spec_out = chart.to_dict()
 
-    # small hint in filter panel (optional)
-    hint = f"Filtered result: {len(filtered)} tracks"
+        # reset selection when filters/mode change
+        bounds = None
+        selected_df = filtered_df
+        meta_text = (
+            f"Plotted: {min(len(filtered_df), 500)} of {len(filtered_df)} tracks"
+            + (" (sampled)" if len(filtered_df) > 500 else "")
+            + f" · Colored by Top 10 genres + Other"
+            + f" · Mode: {'Brush' if mode == 'brush' else 'Pan/Zoom'}"
+            + f" · Selected: {len(selected_df)}"
+        )
 
-    return chart.to_html(), meta_text, hint
+    selected_records = selected_df.head(5000).to_dict("records")
 
+    return spec_out, meta_text, filter_hint, bounds, selected_records
+
+
+@callback(
+    Output("song-list-container", "children"),
+    Input("selected-data-store", "data"),
+)
+def update_song_list(selected_records):
+    if not selected_records:
+        return html.Div(
+            "No tracks selected.",
+            style={"fontSize": "12px", "color": "#666", "padding": "10px"},
+        )
+
+    df = pd.DataFrame(selected_records)
+    return make_song_list_table(df, max_rows=5000)
 
 if __name__ == "__main__":
     app.run(debug=True)
