@@ -53,15 +53,32 @@ def make_song_list_table(
         if "popularity" in view.columns:
             view["popularity"] = pd.to_numeric(view["popularity"], errors="coerce").fillna(0).astype(int)
 
+        # Merge 3 feature columns into one compact cell: E / V / D
+        if all(c in view.columns for c in ["energy", "valence", "danceability"]):
+            view["audio_profile"] = (
+                view["energy"].map(lambda x: f"{x:.2f}")
+                + " / "
+                + view["valence"].map(lambda x: f"{x:.2f}")
+                + " / "
+                + view["danceability"].map(lambda x: f"{x:.2f}")
+            )
+            view = view.drop(columns=["energy", "valence", "danceability"])
+
         data = view.head(max_rows).to_dict("records")
+
+    # Display columns: replace 3 feature columns with one compact profile column
+    display_cols = cols.copy()
+    if all(c in display_cols for c in ["energy", "valence", "danceability"]):
+        display_cols = [c for c in display_cols if c not in {"energy", "valence", "danceability"}]
+        display_cols.append("audio_profile")
 
     # Column definitions (with types for better sorting)
     column_defs = []
-    for c in cols:
+    for c in display_cols:
         if c in {"popularity"}:
             column_defs.append({"name": "Popularity", "id": c, "type": "numeric"})
-        elif c in {"energy", "valence", "danceability"}:
-            column_defs.append({"name": c.capitalize(), "id": c, "type": "numeric"})
+        elif c == "audio_profile":
+            column_defs.append({"name": "Energy/Valence/Danceability", "id": c, "type": "text"})
         elif c == "track_name":
             column_defs.append({"name": "Title", "id": c, "type": "text"})
         elif c == "artists":
@@ -71,29 +88,48 @@ def make_song_list_table(
         else:
             column_defs.append({"name": c, "id": c})
 
-    # Popularity as a "bar" using DataTable style_data_conditional
-    style_conditional = []
-    if "popularity" in cols:
-        # Create a simple horizontal bar via background gradient
-        # Works because popularity is 0-100
+    # Visual polish to match dashboard cards
+    style_conditional = [
+        {"if": {"row_index": "odd"}, "backgroundColor": "#fbfcfd"},
+        {"if": {"state": "active"}, "backgroundColor": "#eef8f1", "border": "1px solid #b9e3c6"},
+        {"if": {"state": "selected"}, "backgroundColor": "#e6f5eb", "border": "1px solid #8fd3a7"},
+        {"if": {"column_id": "track_name"}, "fontWeight": "600", "color": "#1f2937"},
+        {"if": {"column_id": "artists"}, "color": "#4b5563"},
+        {"if": {"column_id": "audio_profile"}, "fontFamily": "Consolas, monospace", "color": "#334155"},
+    ]
+    if "popularity" in display_cols:
+        # Replicate compact in-cell progress bars (no visible numbers)
         style_conditional.extend(
             [
                 {
                     "if": {"column_id": "popularity"},
                     "textAlign": "left",
-                    "padding": "6px 10px",
+                    "color": "transparent",
+                    "fontSize": "0px",
+                    "padding": "4px 6px",
+                    "backgroundColor": "white",
+                    "backgroundRepeat": "no-repeat",
+                    "backgroundPosition": "center",
+                    "backgroundSize": "100% 8px",
                 },
-                # Gradient bar per cell
-                # Dash DataTable supports `filter_query` rules; we use ranges.
             ]
         )
-
-        # 0..100 step rules (coarse, but good enough visually)
         for p in range(0, 101, 5):
+            end = 12 + int(p * 0.76)  # keep left/right inset inside the cell
             style_conditional.append(
                 {
                     "if": {"filter_query": f"{{popularity}} >= {p}", "column_id": "popularity"},
-                    "background": f"linear-gradient(90deg, #4c7dff {p}%, transparent {p}%)",
+                    "backgroundImage": (
+                        f"linear-gradient(90deg, "
+                        f"transparent 0%, "
+                        f"transparent 8%, "
+                        f"#67b567 8%, "
+                        f"#67b567 {end}%, "
+                        f"#dce8dc {end}%, "
+                        f"#dce8dc 92%, "
+                        f"transparent 92%, "
+                        f"transparent 100%)"
+                    ),
                 }
             )
 
@@ -105,29 +141,48 @@ def make_song_list_table(
         sort_mode="multi",           # <- allow multi-column sort with shift-click
         page_action="native",
         page_size=10,          # <- use scroll instead of pages
+        fill_width=False,
+        style_as_list_view=True,
         style_table={
-            "width": "100%",
+            "width": "600px",
+            "maxWidth": "600px",
             "overflowX": "auto",
-            "borderRadius": "0px",
-            "border": "1px solid #e9e9ef",
+            "borderRadius": "2px",
+            "border": "1px solid #d7dde6",
+            "overflow": "hidden",
         },
         style_header={
-            "fontWeight": "600",
-            "backgroundColor": "#39d3ee8d",
-            "borderBottom": "1px solid #e9e9ef",
-            "padding": "10px",
-            "fontSize": "9px",
+            "fontFamily": "'Segoe UI', system-ui, -apple-system, Roboto, Arial",
+            "fontWeight": "700",
+            "backgroundColor": "#edf1f4",
+            "color": "#1f2937",
+            "borderBottom": "1px solid #d7dde6",
+            "padding": "10px 10px",
+            "fontSize": "12px",
+            "letterSpacing": "0.1px",
+            "whiteSpace": "nowrap",
+            "textOverflow": "ellipsis",
+            "overflow": "hidden",
         },
         style_cell={
-            "padding": "9px",
-            "fontSize": "9px",
+            "padding": "6px 8px",
+            "fontSize": "11px",
             "backgroundColor": "white",
-            "borderBottom": "1px solid #f0f0f6",
+            "borderBottom": "1px solid #f1f5f9",
             "whiteSpace": "nowrap",
             "overflow": "hidden",
             "textOverflow": "ellipsis",
-            "maxWidth": 0,
+            "minWidth": "80px",
+            "width": "80px",
+            "maxWidth": "80px",
         },
+        style_cell_conditional=[
+            {"if": {"column_id": "track_name"}, "width": "110px", "minWidth": "110px", "maxWidth": "110px"},
+            {"if": {"column_id": "artists"}, "width": "110px", "minWidth": "110px", "maxWidth": "110px"},
+            {"if": {"column_id": "track_genre"}, "width": "90px", "minWidth": "90px", "maxWidth": "90px"},
+            {"if": {"column_id": "popularity"}, "width": "80px", "minWidth": "80px", "maxWidth": "80px"},
+            {"if": {"column_id": "audio_profile"}, "width": "210px", "minWidth": "210px", "maxWidth": "210px"},
+        ],
         style_data_conditional=style_conditional,
         tooltip_data=[
             {k: {"value": str(v), "type": "markdown"} for k, v in row.items()} for row in data

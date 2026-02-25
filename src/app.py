@@ -386,21 +386,21 @@ def update_scatter_and_stores(mode, keyword, genre_values, explicit_mode, tempo_
         html.Div(f"{n_selected:,} tracks selected" + (" (brush active)" if bounds else ""), style={"color": GREEN if bounds else "#888"}),
     ]
 
-    n_shown = min(n_filtered, 2000)
-    sampled = n_filtered > 2000
+    n_shown = min(n_filtered, 500)
+    sampled = n_filtered > 500
     meta_text = (
         f"Showing {n_shown:,}" + (" sampled" if sampled else "") +
         f" of {n_filtered:,} filtered · " +
         ("Brush to select a region" if mode == "brush" else "Pan & zoom enabled")
     )
 
-    if triggered == "scatter":
+    if triggered == "scatter" and signal_data:
         spec_out = no_update
     else:
         chart, _ = make_scatter(
             filtered_df,
             mode=mode,
-            max_points=2000,
+            max_points=500,
             topk_genres=10,
             selection_name="brush_selection",
             width=540,
