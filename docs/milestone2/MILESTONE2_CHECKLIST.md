@@ -31,7 +31,7 @@
 - [x] **Early Deployment & Redeployments Completed**  
   Initial deployment done early; app redeployed after major dependency or feature updates.
 
-- [ ] **GitHub Issues Created**  
+- [x] **GitHub Issues Created**  
   Issues are used to track planned features, bugs, and incomplete parts of the dashboard.
 
 - [x] **Pull Requests and Reviews Used**  
