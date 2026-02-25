@@ -1,5 +1,6 @@
 dash==2.16.1
 pandas
+numpy
 altair
 dash-vega-components
 gunicorn
