@@ -10,7 +10,7 @@ def make_distribution(df: pd.DataFrame, *, max_points: int = 3000, width: int = 
         return (
             alt.Chart(pd.DataFrame({"Feature": [], "value": []}))
             .mark_area()
-            .properties(width=width, height=height, title="Feature Distributions")
+            .properties(width=width, height=height)
         )
 
     plot_df = df if len(df) <= max_points else df.sample(n=max_points, random_state=42)
@@ -57,11 +57,12 @@ def make_distribution(df: pd.DataFrame, *, max_points: int = 3000, width: int = 
                 alt.Tooltip("density:Q", format=".3f"),
             ],
         )
-        .properties(width=width, height=height, title="Feature Density (Danceability · Energy · Valence · Acousticness)")
+        .properties(width=width, height=height)
     )
 
     return (
         chart
+        .configure(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
         .configure_view(stroke=None)
         .configure_axis(labelFontSize=11, titleFontSize=11)
         .configure_title(fontSize=13, fontWeight=600, anchor="start")

@@ -7,8 +7,8 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
         return (
             alt.Chart(pd.DataFrame({"track_genre": [], "avg_popularity": []}))
             .mark_bar()
-            .encode(x="avg_popularity:Q", y="track_genre:N")
-            .properties(width=width, height=height, title="Average Popularity by Genre")
+            .encode(x="track_genre:N", y="avg_popularity:Q")
+            .properties(width=width, height=height)
         )
 
     agg = (
@@ -23,12 +23,25 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
         .nlargest(top_n, "avg_popularity")
     )
 
+    sort_order = agg.sort_values("avg_popularity", ascending=False)["track_genre"].tolist()
+
     bars = (
         alt.Chart(agg)
-        .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
+        .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
         .encode(
-            y=alt.Y("track_genre:N", sort="-x", title=None, axis=alt.Axis(labelLimit=120)),
             x=alt.X(
+                "track_genre:N",
+                sort=sort_order,
+                title=None,
+                axis=alt.Axis(
+                    labelAngle=-25,
+                    labelLimit=80,
+                    labelAlign="right",
+                    labelBaseline="top",
+                    labelPadding=6,
+                ),
+            ),
+            y=alt.Y(
                 "avg_popularity:Q",
                 title="Avg Popularity",
                 scale=alt.Scale(domain=[0, 100]),
@@ -39,10 +52,13 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
                 title="Avg Energy",
                 scale=alt.Scale(scheme="plasma", domain=[0, 1]),
                 legend=alt.Legend(
-                    orient="top",
-                    gradientLength=140,
+                    orient="left",
+                    gradientLength=80,
+                    gradientThickness=8,
+                    offset=4,
                     title="Avg Energy",
-                    titleFontSize=11,
+                    titleFontSize=10,
+                    labelFontSize=9,
                 ),
             ),
             tooltip=[
@@ -53,22 +69,28 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
                 alt.Tooltip("count:Q", title="Track Count"),
             ],
         )
-        .properties(width=width, height=height, title="Top Genres by Average Popularity")
+        .properties(width=width, height=height)
     )
 
     text = (
         alt.Chart(agg)
-        .mark_text(align="left", dx=4, fontSize=10, color="#666")
+        .mark_text(align="center", dy=-6, fontSize=10, color="#666")
         .encode(
-            y=alt.Y("track_genre:N", sort="-x"),
-            x=alt.X("avg_popularity:Q"),
+            x=alt.X("track_genre:N", sort=sort_order),
+            y=alt.Y("avg_popularity:Q"),
             text=alt.Text("avg_popularity:Q", format=".1f"),
         )
     )
 
     return (
         (bars + text)
+        .properties(
+            width=width,
+            height=height,
+            padding={"top": 8, "right": 8, "bottom": 36, "left": 8},
+        )
+        .configure(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
         .configure_view(stroke=None)
-        .configure_axis(labelFontSize=11, titleFontSize=12)
+        .configure_axis(labelFontSize=11, titleFontSize=11)
         .configure_title(fontSize=13, fontWeight=600, anchor="start")
     )

@@ -110,7 +110,7 @@ def make_scatter(
         )
 
     chart = chart.configure(
-        autosize=alt.AutoSizeParams(type="fit", contains="padding")
+        autosize=alt.AutoSizeParams(type="pad", contains="padding")
     ).configure_view(stroke=None)
 
     meta = {
