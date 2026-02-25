@@ -87,7 +87,7 @@ def make_scatter(
         "popularity:Q",
         title="Popularity",
         scale=alt.Scale(range=[20, 200]),
-        legend=alt.Legend(orient="bottom-right", titleFontSize=10),
+        legend=alt.Legend(orient="right", titleFontSize=10, labelFontSize=10),
     )
 
     if mode == "brush":
