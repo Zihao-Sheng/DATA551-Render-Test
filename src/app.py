@@ -2,7 +2,7 @@
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from dash import Dash, html, dcc, Input, Output, callback, ctx, no_update
+from dash import Dash, html, dcc, Input, Output, State, callback, ctx, no_update, ALL
 import pandas as pd
 import numpy as np
 import dash_vega_components as dvc
@@ -32,8 +32,14 @@ data_norm = (data[AUDIO_FEATURES] - _feat_min) / _feat_rng
 
 TEMPO_MIN, TEMPO_MAX = 0, 250
 POP_MIN, POP_MAX = 0, 100
-TOP_GENRES = list(data["track_genre"].value_counts().head(15).index)
-GENRE_OPTIONS = [{"label": g, "value": g} for g in TOP_GENRES]
+GENRES_BY_POPULARITY = (
+    data.groupby("track_genre")["popularity"]
+    .mean()
+    .sort_values(ascending=False)
+    .index
+    .tolist()
+)
+GENRE_OPTIONS = [{"label": g, "value": g} for g in GENRES_BY_POPULARITY]
 
 app = Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
@@ -45,6 +51,7 @@ PAGE = {
     "backgroundColor": "#f0f2f5",
     "minHeight": "100vh",
     "padding": "0",
+    "zoom": "1.0",
 }
 CARD = {
     "backgroundColor": "white",
@@ -98,7 +105,7 @@ app.layout = html.Div(
                 "marginBottom": "0",
             },
             children=html.Div(
-                style={"maxWidth": "1760px", "margin": "0 auto",
+                style={"maxWidth": "1960px", "margin": "0 auto",
                        "display": "flex", "justifyContent": "space-between", "alignItems": "center"},
                 children=[
                     html.Div([
@@ -126,11 +133,11 @@ app.layout = html.Div(
 
         html.Div(
             style={
-                "maxWidth": "1760px",
+                "maxWidth": "1960px",
                 "margin": "0 auto",
                 "padding": "16px",
                 "display": "grid",
-                "gridTemplateColumns": "270px 1fr 320px",
+                "gridTemplateColumns": "270px minmax(0, 1fr) 320px",
                 "gap": "16px",
                 "alignItems": "start",
             },
@@ -151,16 +158,25 @@ app.layout = html.Div(
                         ),
 
                         html.Div("Genre", style=FILTER_LABEL),
+                        dcc.Dropdown(
+                            id="genre-picker",
+                            options=GENRE_OPTIONS,
+                            value=None,
+                            placeholder="Search & add a genre…",
+                            clearable=True,
+                            searchable=True,
+                            style={"fontSize": "12px"},
+                        ),
                         html.Div(
-                            dcc.Checklist(
-                                id="genre",
-                                options=GENRE_OPTIONS,
-                                value=[],
-                                style={"rowGap": "5px", "display": "grid"},
-                                labelStyle={"display": "flex", "alignItems": "center", "gap": "8px", "fontSize": "13px"},
-                                inputStyle={"accentColor": GREEN},
-                            ),
-                            style={"maxHeight": "240px", "overflowY": "auto", "paddingRight": "4px"},
+                            id="selected-genres-box",
+                            style={
+                                "marginTop": "8px",
+                                "padding": "8px",
+                                "border": "1px solid #e2e5ea",
+                                "borderRadius": "10px",
+                                "backgroundColor": "#fbfcfd",
+                                "minHeight": "46px",
+                            },
                         ),
 
                         html.Div("Explicit Content", style=FILTER_LABEL),
@@ -205,6 +221,7 @@ app.layout = html.Div(
                 ),
 
                 html.Div(
+                    style={"minWidth": 0},
                     children=[
                         html.Div(
                             style=CARD,
@@ -241,14 +258,44 @@ app.layout = html.Div(
                         ),
 
                         html.Div(
-                            style=CARD,
+                            style={
+                                "display": "grid",
+                                "gridTemplateColumns": "1fr 1fr",
+                                "gap": "16px",
+                                "marginBottom": "16px",
+                            },
                             children=[
-                                html.H4("Top Genres by Popularity", style=SECTION_TITLE),
-                                dvc.Vega(
-                                    id="genre-bar",
-                                    spec={},
-                                    opt={"renderer": "svg", "actions": False},
-                                    style={"width": "100%"},
+                                html.Div(
+                                    style={**CARD, "marginBottom": 0, "minWidth": 0},
+                                    children=[
+                                        html.H4("Top Genres by Popularity", style=SECTION_TITLE),
+                                        html.Div(
+                                            style={"fontSize": "11px", "color": "#888", "marginBottom": "10px"},
+                                            children="Average popularity by genre, colored by mean energy.",
+                                        ),
+                                        dvc.Vega(
+                                            id="genre-bar",
+                                            spec={},
+                                            opt={"renderer": "svg", "actions": False},
+                                            style={"width": "100%", "maxWidth": "100%", "minWidth": 0, "overflow": "hidden"},
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    style={**CARD, "marginBottom": 0, "minWidth": 0},
+                                    children=[
+                                        html.H4("Avg Audio Profile", style=SECTION_TITLE),
+                                        html.Div(
+                                            style={"fontSize": "11px", "color": "#888", "marginBottom": "10px"},
+                                            children="Mean values for selected / filtered tracks.",
+                                        ),
+                                        dvc.Vega(
+                                            id="audio-profile",
+                                            spec={},
+                                            opt={"renderer": "svg", "actions": False},
+                                            style={"width": "100%", "maxWidth": "100%", "minWidth": 0, "overflow": "hidden"},
+                                        ),
+                                    ],
                                 ),
                             ],
                         ),
@@ -257,6 +304,10 @@ app.layout = html.Div(
                             style=CARD,
                             children=[
                                 html.H4("Feature Density — Selected Tracks", style=SECTION_TITLE),
+                                html.Div(
+                                    style={"fontSize": "11px", "color": "#888", "marginBottom": "10px"},
+                                    children="Distribution of key audio features for the current selection.",
+                                ),
                                 dvc.Vega(
                                     id="distribution",
                                     spec={},
@@ -266,31 +317,19 @@ app.layout = html.Div(
                             ],
                         ),
 
-                        html.Div(
-                            style=CARD,
-                            children=[
-                                html.H4("Track List", style=SECTION_TITLE),
-                                html.Div(id="song-list-container"),
-                            ],
-                        ),
                     ],
                 ),
 
                 html.Div(
+                    style={"minWidth": 0},
                     children=[
                         html.Div(
                             style=CARD,
                             children=[
-                                html.H4("Avg Audio Profile", style=SECTION_TITLE),
+                                html.H4("Compare Mode", style=SECTION_TITLE),
                                 html.Div(
-                                    style={"fontSize": "11px", "color": "#888", "marginBottom": "10px"},
-                                    children="Mean values for selected / filtered tracks.",
-                                ),
-                                dvc.Vega(
-                                    id="audio-profile",
-                                    spec={},
-                                    opt={"renderer": "svg", "actions": False},
-                                    style={"width": "100%"},
+                                    "Placeholder panel for side-by-side group comparison.",
+                                    style={"fontSize": "12px", "color": "#888", "lineHeight": "1.6"},
                                 ),
                             ],
                         ),
@@ -317,13 +356,97 @@ app.layout = html.Div(
                         ),
                     ],
                 ),
+
+                html.Div(
+                    style={**CARD, "gridColumn": "1 / -1", "minWidth": 0, "marginBottom": 0},
+                    children=[
+                        html.H4("Track List", style=SECTION_TITLE),
+                        html.Div(id="song-list-container"),
+                    ],
+                ),
             ],
         ),
 
         dcc.Store(id="brush-bounds-store"),
         dcc.Store(id="selected-data-store"),
+        dcc.Store(id="selected-genres-store", data=[]),
     ],
 )
+
+
+@callback(
+    Output("selected-genres-store", "data"),
+    Output("genre-picker", "value"),
+    Input("genre-picker", "value"),
+    Input({"type": "genre-remove", "genre": ALL}, "n_clicks"),
+    State("selected-genres-store", "data"),
+    prevent_initial_call=True,
+)
+def update_selected_genres_store(picked_genre, _remove_clicks, current_selected):
+    selected = list(current_selected or [])
+    triggered = ctx.triggered_id
+
+    if isinstance(triggered, dict) and triggered.get("type") == "genre-remove":
+        genre = triggered.get("genre")
+        selected = [g for g in selected if g != genre]
+        return selected, None
+
+    if triggered == "genre-picker" and picked_genre:
+        if picked_genre not in selected:
+            selected.append(picked_genre)
+
+    return selected, None
+
+
+@callback(
+    Output("selected-genres-box", "children"),
+    Input("selected-genres-store", "data"),
+)
+def render_selected_genres_box(selected_genres):
+    selected = list(selected_genres or [])
+    if not selected:
+        return html.Div("No genres selected.", style={"fontSize": "12px", "color": "#9aa1ab"})
+
+    chips = []
+    for g in selected:
+        chips.append(
+            html.Div(
+                style={
+                    "display": "inline-flex",
+                    "alignItems": "center",
+                    "gap": "6px",
+                    "padding": "4px 8px",
+                    "borderRadius": "14px",
+                    "border": "1px solid #d9e9df",
+                    "backgroundColor": "#eef8f1",
+                    "color": "#2d6a4f",
+                    "fontSize": "12px",
+                    "fontWeight": "600",
+                },
+                children=[
+                    html.Span(g),
+                    html.Button(
+                        "×",
+                        id={"type": "genre-remove", "genre": g},
+                        n_clicks=0,
+                        style={
+                            "border": "none",
+                            "background": "transparent",
+                            "color": "#2d6a4f",
+                            "cursor": "pointer",
+                            "fontSize": "13px",
+                            "lineHeight": "1",
+                            "padding": "0 2px",
+                        },
+                    ),
+                ],
+            )
+        )
+
+    return html.Div(
+        chips,
+        style={"display": "flex", "flexWrap": "wrap", "gap": "6px"},
+    )
 
 
 @callback(
@@ -335,7 +458,7 @@ app.layout = html.Div(
     Output("selected-data-store", "data"),
     Input("toolbox-mode", "value"),
     Input("keyword", "value"),
-    Input("genre", "value"),
+    Input("selected-genres-store", "data"),
     Input("explicit", "value"),
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
@@ -403,14 +526,14 @@ def update_scatter_and_stores(mode, keyword, genre_values, explicit_mode, tempo_
             max_points=500,
             topk_genres=10,
             selection_name="brush_selection",
-            width=540,
-            height=380,
+            width=400,
+            height=400,
         )
         spec_out = chart.to_dict()
         bounds = None
         selected_df = filtered_df
 
-    selected_records = selected_df.head(5000).to_dict("records")
+    selected_records = selected_df.to_dict("records")
 
     return spec_out, meta_text, stats_children, filter_hint, bounds, selected_records
 
@@ -424,7 +547,7 @@ def update_genre_bar(selected_records):
         df = pd.DataFrame()
     else:
         df = pd.DataFrame(selected_records)
-    chart = make_genre_bar(df, top_n=12, width=480, height=280)
+    chart = make_genre_bar(df, top_n=12, width="container", height=265)
     return chart.to_dict()
 
 
@@ -450,7 +573,7 @@ def update_audio_profile(selected_records):
         df = pd.DataFrame()
     else:
         df = pd.DataFrame(selected_records)
-    chart = make_audio_profile(df, width=260, height=240)
+    chart = make_audio_profile(df, width="container", height=290)
     return chart.to_dict()
 
 
@@ -472,8 +595,10 @@ def update_song_list(selected_records):
     Output("similar-track-dropdown", "options"),
     Output("similar-track-dropdown", "value"),
     Input("selected-data-store", "data"),
+    Input("similar-track-dropdown", "search_value"),
+    State("similar-track-dropdown", "value"),
 )
-def update_similar_dropdown(selected_records):
+def update_similar_dropdown(selected_records, search_value, current_value):
     if not selected_records:
         return [], None
 
@@ -483,39 +608,76 @@ def update_similar_dropdown(selected_records):
     if missing:
         return [], None
 
-    top30 = df.nlargest(30, "popularity")[needed].drop_duplicates("track_id")
+    base = df[needed].drop_duplicates("track_id")
+    base["popularity"] = pd.to_numeric(base["popularity"], errors="coerce").fillna(0)
+
+    # Default: show top-30 popular tracks.
+    # When user types search, filter across the full selected set.
+    if search_value and str(search_value).strip():
+        q = str(search_value).strip().lower()
+        mask = (
+            base["track_name"].astype(str).str.lower().str.contains(q, na=False) |
+            base["artists"].astype(str).str.lower().str.contains(q, na=False)
+        )
+        options_df = base[mask].nlargest(100, "popularity")
+    else:
+        options_df = base.nlargest(30, "popularity")
+
     options = [
         {
             "label": f"{row.track_name}  —  {row.artists}  (pop {int(row.popularity)})",
             "value": row.track_id,
         }
-        for row in top30.itertuples()
+        for row in options_df.itertuples()
     ]
-    return options, None
+    option_values = {opt["value"] for opt in options}
+    next_value = current_value if current_value in option_values else None
+    return options, next_value
 
 
 @callback(
     Output("similar-tracks-container", "children"),
     Input("similar-track-dropdown", "value"),
+    Input("selected-data-store", "data"),
 )
-def update_similar_tracks(track_id):
+def update_similar_tracks(track_id, selected_records):
     if not track_id:
         return html.Div(
             "Select a track above to discover audio-similar but underrated songs.",
             style={"fontSize": "12px", "color": "#aaa", "padding": "8px 0", "lineHeight": "1.5"},
         )
 
-    matches = data[data["track_id"] == track_id]
+    pool = pd.DataFrame(selected_records) if selected_records else data.copy()
+    required = ["track_id", "track_name", "artists", "track_genre", "popularity", *AUDIO_FEATURES]
+    missing = [c for c in required if c not in pool.columns]
+    if missing:
+        return html.Div("Selected data missing required columns.", style={"fontSize": "12px", "color": "#c00"})
+
+    matches = pool[pool["track_id"] == track_id]
+    if matches.empty:
+        # Fallback for edge cases where selected set changed after choosing a track
+        matches = data[data["track_id"] == track_id]
     if matches.empty:
         return html.Div("Track not found.", style={"fontSize": "12px", "color": "#c00"})
 
     ref = matches.iloc[0]
-    ref_pop = int(ref["popularity"])
-    ref_norm = data_norm.loc[matches.index[0]]
 
-    dists = np.sqrt(((data_norm - ref_norm) ** 2).sum(axis=1))
-    candidates = data.copy()
-    candidates["_dist"] = dists.values
+    work = pool[required].copy()
+    for c in ["popularity", *AUDIO_FEATURES]:
+        work[c] = pd.to_numeric(work[c], errors="coerce")
+    work = work.dropna(subset=["track_id", "popularity", *AUDIO_FEATURES]).drop_duplicates("track_id")
+
+    ref_rows = work[work["track_id"] == track_id]
+    if ref_rows.empty:
+        return html.Div("Reference track is not in current selection.", style={"fontSize": "12px", "color": "#c00"})
+
+    ref_pop = int(ref_rows.iloc[0]["popularity"])
+    ref_norm = ((ref_rows.iloc[0][AUDIO_FEATURES] - _feat_min) / _feat_rng).to_numpy(dtype=float)
+    work_norm = ((work[AUDIO_FEATURES] - _feat_min) / _feat_rng).to_numpy(dtype=float)
+    dists = np.linalg.norm(work_norm - ref_norm, axis=1)
+
+    candidates = work.copy()
+    candidates["_dist"] = dists
     candidates = (
         candidates[
             (candidates["track_id"] != track_id) &

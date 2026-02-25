@@ -53,32 +53,15 @@ def make_song_list_table(
         if "popularity" in view.columns:
             view["popularity"] = pd.to_numeric(view["popularity"], errors="coerce").fillna(0).astype(int)
 
-        # Merge 3 feature columns into one compact cell: E / V / D
-        if all(c in view.columns for c in ["energy", "valence", "danceability"]):
-            view["audio_profile"] = (
-                view["energy"].map(lambda x: f"{x:.2f}")
-                + " / "
-                + view["valence"].map(lambda x: f"{x:.2f}")
-                + " / "
-                + view["danceability"].map(lambda x: f"{x:.2f}")
-            )
-            view = view.drop(columns=["energy", "valence", "danceability"])
-
         data = view.head(max_rows).to_dict("records")
-
-    # Display columns: replace 3 feature columns with one compact profile column
-    display_cols = cols.copy()
-    if all(c in display_cols for c in ["energy", "valence", "danceability"]):
-        display_cols = [c for c in display_cols if c not in {"energy", "valence", "danceability"}]
-        display_cols.append("audio_profile")
 
     # Column definitions (with types for better sorting)
     column_defs = []
-    for c in display_cols:
+    for c in cols:
         if c in {"popularity"}:
             column_defs.append({"name": "Popularity", "id": c, "type": "numeric"})
-        elif c == "audio_profile":
-            column_defs.append({"name": "Energy/Valence/Danceability", "id": c, "type": "text"})
+        elif c in {"energy", "valence", "danceability"}:
+            column_defs.append({"name": c.capitalize(), "id": c, "type": "numeric"})
         elif c == "track_name":
             column_defs.append({"name": "Title", "id": c, "type": "text"})
         elif c == "artists":
@@ -95,9 +78,8 @@ def make_song_list_table(
         {"if": {"state": "selected"}, "backgroundColor": "#e6f5eb", "border": "1px solid #8fd3a7"},
         {"if": {"column_id": "track_name"}, "fontWeight": "600", "color": "#1f2937"},
         {"if": {"column_id": "artists"}, "color": "#4b5563"},
-        {"if": {"column_id": "audio_profile"}, "fontFamily": "Consolas, monospace", "color": "#334155"},
     ]
-    if "popularity" in display_cols:
+    if "popularity" in cols:
         # Replicate compact in-cell progress bars (no visible numbers)
         style_conditional.extend(
             [
@@ -140,12 +122,13 @@ def make_song_list_table(
         sort_action="native",        # <- click headers to sort
         sort_mode="multi",           # <- allow multi-column sort with shift-click
         page_action="native",
-        page_size=10,          # <- use scroll instead of pages
+        page_size=15,          # <- use scroll instead of pages
         fill_width=False,
         style_as_list_view=True,
         style_table={
-            "width": "600px",
-            "maxWidth": "600px",
+            "width": "1050px",
+            "maxWidth": "100%",
+            "margin": "0 auto",
             "overflowX": "auto",
             "borderRadius": "2px",
             "border": "1px solid #d7dde6",
@@ -177,13 +160,19 @@ def make_song_list_table(
             "maxWidth": "80px",
         },
         style_cell_conditional=[
-            {"if": {"column_id": "track_name"}, "width": "110px", "minWidth": "110px", "maxWidth": "110px"},
-            {"if": {"column_id": "artists"}, "width": "110px", "minWidth": "110px", "maxWidth": "110px"},
-            {"if": {"column_id": "track_genre"}, "width": "90px", "minWidth": "90px", "maxWidth": "90px"},
-            {"if": {"column_id": "popularity"}, "width": "80px", "minWidth": "80px", "maxWidth": "80px"},
-            {"if": {"column_id": "audio_profile"}, "width": "210px", "minWidth": "210px", "maxWidth": "210px"},
+            {"if": {"column_id": "track_name"}, "width": "220px", "minWidth": "220px", "maxWidth": "220px"},
+            {"if": {"column_id": "artists"}, "width": "270px", "minWidth": "270px", "maxWidth": "270px"},
+            {"if": {"column_id": "track_genre"}, "width": "150px", "minWidth": "150px", "maxWidth": "150px"},
+            {"if": {"column_id": "popularity"}, "width": "120px", "minWidth": "120px", "maxWidth": "120px"},
+            {"if": {"column_id": "energy"}, "width": "90px", "minWidth": "90px", "maxWidth": "90px"},
+            {"if": {"column_id": "valence"}, "width": "90px", "minWidth": "90px", "maxWidth": "90px"},
+            {"if": {"column_id": "danceability"}, "width": "110px", "minWidth": "110px", "maxWidth": "110px"},
         ],
         style_data_conditional=style_conditional,
+        css=[
+            {"selector": ".dash-spreadsheet-menu", "rule": "display:flex; justify-content:center;"},
+            {"selector": ".previous-next-container", "rule": "float:none; margin: 0 auto;"},
+        ],
         tooltip_data=[
             {k: {"value": str(v), "type": "markdown"} for k, v in row.items()} for row in data
         ],

@@ -16,7 +16,7 @@ def make_audio_profile(df: pd.DataFrame, *, width: int = 240, height: int = 260)
         return (
             alt.Chart(pd.DataFrame({"feature": [], "mean_value": []}))
             .mark_bar()
-            .properties(width=width, height=height, title="Audio Feature Profile")
+            .properties(width=width, height=height)
         )
 
     cols = [c for c in PROFILE_FEATURES if c in df.columns]
@@ -29,17 +29,24 @@ def make_audio_profile(df: pd.DataFrame, *, width: int = 240, height: int = 260)
         alt.Chart(means)
         .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
         .encode(
-            y=alt.Y(
+            x=alt.X(
                 "feature:N",
                 sort=feat_labels,
                 title=None,
-                axis=alt.Axis(labelFontSize=11),
+                axis=alt.Axis(
+                    labelFontSize=11,
+                    labelAngle=-25,
+                    labelLimit=80,
+                    labelAlign="right",
+                    labelBaseline="top",
+                    labelPadding=6,
+                ),
             ),
-            x=alt.X(
+            y=alt.Y(
                 "mean_value:Q",
-                title="Mean (0–1)",
+                title="Mean (0-1)",
                 scale=alt.Scale(domain=[0, 1]),
-                axis=alt.Axis(grid=True, gridOpacity=0.2, labelFontSize=10),
+                axis=alt.Axis(grid=True, gridOpacity=0.2, labelFontSize=11),
             ),
             color=alt.Color(
                 "feature:N",
@@ -55,17 +62,22 @@ def make_audio_profile(df: pd.DataFrame, *, width: int = 240, height: int = 260)
 
     text = (
         alt.Chart(means)
-        .mark_text(align="left", dx=4, fontSize=10, color="#555")
+        .mark_text(align="center", dy=-6, fontSize=10, color="#555")
         .encode(
-            y=alt.Y("feature:N", sort=feat_labels),
-            x="mean_value:Q",
+            x=alt.X("feature:N", sort=feat_labels),
+            y=alt.Y("mean_value:Q"),
             text=alt.Text("mean_value:Q", format=".2f"),
         )
     )
 
     return (
         (bars + text)
-        .properties(width=width, height=height, title="Avg Audio Profile (Selection)")
+        .properties(
+            width=width,
+            height=height,
+            padding={"top": 8, "right": 8, "bottom": 36, "left": 8},
+        )
+        .configure(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
         .configure_view(stroke=None)
         .configure_axis(labelFontSize=11, titleFontSize=11)
         .configure_title(fontSize=13, fontWeight=600, anchor="start")
