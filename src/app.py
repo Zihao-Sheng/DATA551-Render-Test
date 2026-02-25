@@ -1,4 +1,4 @@
-# app.py
+﻿# app.py
 from dash import Dash, html, dcc, Input, Output, callback, ctx, no_update
 import pandas as pd
 from pathlib import Path
