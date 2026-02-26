@@ -35,6 +35,19 @@ We also derive additional variables such as:
 **Data source:** [Spotify Tracks Dataset](https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset) by Maharshi Pandya on Kaggle.
 
 
+## Running Locally
+
+Prerequisites:
+- Python 3.9+
+- The dataset at `data/raw/dataset.csv`
+
+Steps:
+1. Create/activate a Python environment.
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run the app: `python src/app.py`
+4. Open `http://127.0.0.1:8050/` in your browser.
+
+
 ## App Description & Sketch
 
 The Spotify Track Insights Explorer is designed around multiple coordinated views. On the left, a control panel lets users filter the catalogue by track genre (multi-select), explicit flag, tempo band, and popularity tier. A search box allows quick filtering by track name, artist, or album, which is useful when working with large selections.
@@ -56,16 +69,21 @@ View the dashboard sketch here:
 
 ```
 DATA-551-GROUP-7/
+├── assets/
 ├── data/
 │   ├── processed/
 │   └── raw/
 │       └── dataset.csv
+├── doc/
+│   └── reflection-milestone2.md
 ├── docs/
 │   ├── images/
 │   └── milestone1/
 │       ├── dashboard-sketch.pdf
 │       ├── DATA 551-Group-7-Proposal.pdf
 │       └── MILESTONE1_CHECKLIST.md
+├── reports/
+│   └── Milestone 2.ipynb
 ├── src/
 │   ├── __init__.py
 │   └── app.py
@@ -77,6 +95,14 @@ DATA-551-GROUP-7/
 ├── README.md
 └── team-contract.md
 ``` 
+
+## For Contributors
+
+If you want to help with development:
+- Please read `CONTRIBUTING.md` for workflow and issue/PR guidelines.
+- Include clear steps to reproduce bugs and screenshots for UI issues.
+- Keep changes scoped and open a PR for review.
+
 
 ## Contributing & Code of Conduct
 
