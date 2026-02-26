@@ -63,10 +63,15 @@ def filter_tracks(
     # ---------- keyword (case-insensitive) ----------
     if keyword:
         kw = keyword.lower().strip()
-        mask = (
-            out["track_name"].astype(str).str.lower().str.contains(kw, na=False)
-            | out["artists"].astype(str).str.lower().str.contains(kw, na=False)
-        )
+        # Use precomputed lowercase columns when available to avoid repeated
+        # per-callback string normalization on large datasets.
+        name_col = "_track_name_lc" if "_track_name_lc" in out.columns else "track_name"
+        artist_col = "_artists_lc" if "_artists_lc" in out.columns else "artists"
+
+        left = out[name_col].astype(str) if name_col.startswith("_") else out[name_col].astype(str).str.lower()
+        right = out[artist_col].astype(str) if artist_col.startswith("_") else out[artist_col].astype(str).str.lower()
+
+        mask = left.str.contains(kw, na=False) | right.str.contains(kw, na=False)
         out = out[mask]
 
     # ---------- genre ----------
