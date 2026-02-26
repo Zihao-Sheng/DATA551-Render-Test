@@ -2,6 +2,10 @@
 
 An interactive dashboard for exploring how audio features, genres, and moods relate to track popularity in the Spotify catalogue.
 
+## Deployed App
+
+Public app URL: **https://data-551-group-7-dashboard-milestone-2.onrender.com/**
+
 ## DATA 551 – Group 7
 - Jingtao Yang  
 - Zihao Sheng  
@@ -51,32 +55,53 @@ View the dashboard sketch here:
 
 [Dashboard sketch PDF](./docs/milestone1/dashboard-sketch.pdf)  
 
+### Dashboard Overview (Milestone 2)
+
+![Dashboard Overview](./docs/milestone2/Dashboard_Overview.png)
+
+## Run Locally
+
+1. Install dependencies: `pip install -r requirements.txt`
+2. Run the app: `python src/app.py`
+3. Open: `http://127.0.0.1:8050/`
+
 
 ## Repository Structure
 
 ```
 DATA-551-GROUP-7/
-├── data/
-│   ├── processed/
-│   └── raw/
-│       └── dataset.csv
-├── docs/
-│   ├── images/
-│   └── milestone1/
-│       ├── dashboard-sketch.pdf
-│       ├── DATA 551-Group-7-Proposal.pdf
-│       └── MILESTONE1_CHECKLIST.md
-├── src/
-│   ├── __init__.py
-│   └── app.py
-├── .gitignore
-├── CODE_OF_CONDUCT.md
-├── CONTRIBUTING.md
-├── LICENSE
-├── proposal.md
-├── README.md
-└── team-contract.md
-``` 
+|-- data/
+|   `-- raw/
+|       `-- dataset.csv
+|-- docs/
+|   |-- milestone1/
+|   |   |-- dashboard-sketch.pdf
+|   |   |-- DATA 551-Group-7-Proposal.pdf
+|   |   `-- MILESTONE1_CHECKLIST.md
+|   `-- milestone2/
+|       |-- Dashboard_Overview.png
+|       |-- MILESTONE2_CHECKLIST.md
+|       `-- reflection-milestone2.md
+|-- src/
+|   |-- charts/
+|   |   |-- distribution.py
+|   |   |-- genre_bar.py
+|   |   |-- profile.py
+|   |   |-- scatter.py
+|   |   `-- song_list.py
+|   |-- __init__.py
+|   |-- app.py
+|   `-- filter.py
+|-- Procfile
+|-- runtime.txt
+|-- requirements.txt
+|-- README.md
+|-- proposal.md
+|-- CONTRIBUTING.md
+|-- CODE_OF_CONDUCT.md
+|-- LICENSE
+`-- team-contract.md
+```
 
 ## Contributing & Code of Conduct
 
