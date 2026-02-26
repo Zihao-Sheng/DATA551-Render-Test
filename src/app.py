@@ -41,7 +41,12 @@ GENRES_BY_POPULARITY = (
 )
 GENRE_OPTIONS = [{"label": g, "value": g} for g in GENRES_BY_POPULARITY]
 
-app = Dash(__name__, suppress_callback_exceptions=True)
+app = Dash(
+    __name__,
+    suppress_callback_exceptions=True,
+    assets_folder=str(ROOT / "assets"),
+    meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}],
+)
 server = app.server
 
 GREEN = "#1DB954"
@@ -96,15 +101,18 @@ BADGE = {
 }
 
 app.layout = html.Div(
+    className="page",
     style=PAGE,
     children=[
         html.Div(
+            className="topbar",
             style={
                 "background": f"linear-gradient(135deg, #0d2016 0%, #1a3a22 100%)",
                 "padding": "18px 28px",
                 "marginBottom": "0",
             },
             children=html.Div(
+                className="topbar-inner",
                 style={"maxWidth": "1960px", "margin": "0 auto",
                        "display": "flex", "justifyContent": "space-between", "alignItems": "center"},
                 children=[
@@ -125,25 +133,25 @@ app.layout = html.Div(
                     ]),
                     html.Div(
                         id="header-stats",
-                        style={"display": "flex", "gap": "8px", "alignItems": "center"},
+                        className="header-stats",
+                        style={"display": "flex", "gap": "8px", "alignItems": "center", "flexWrap": "wrap"},
                     ),
                 ],
             ),
         ),
 
         html.Div(
+            className="layout-grid",
             style={
                 "maxWidth": "1960px",
                 "margin": "0 auto",
-                "padding": "16px",
                 "display": "grid",
-                "gridTemplateColumns": "270px minmax(0, 1fr) 320px",
-                "gap": "16px",
                 "alignItems": "start",
             },
             children=[
 
                 html.Div(
+                    className="left-panel",
                     style={**CARD, "marginBottom": 0},
                     children=[
                         html.Div("Filters", style={**SECTION_TITLE, "color": GREEN}),
@@ -221,6 +229,7 @@ app.layout = html.Div(
                 ),
 
                 html.Div(
+                    className="main-panel",
                     style={"minWidth": 0},
                     children=[
                         html.Div(
@@ -258,12 +267,7 @@ app.layout = html.Div(
                         ),
 
                         html.Div(
-                            style={
-                                "display": "grid",
-                                "gridTemplateColumns": "1fr 1fr",
-                                "gap": "16px",
-                                "marginBottom": "16px",
-                            },
+                            className="two-up",
                             children=[
                                 html.Div(
                                     style={**CARD, "marginBottom": 0, "minWidth": 0},
@@ -321,6 +325,7 @@ app.layout = html.Div(
                 ),
 
                 html.Div(
+                    className="right-panel",
                     style={"minWidth": 0},
                     children=[
                         html.Div(
@@ -358,7 +363,8 @@ app.layout = html.Div(
                 ),
 
                 html.Div(
-                    style={**CARD, "gridColumn": "1 / -1", "minWidth": 0, "marginBottom": 0},
+                    className="bottom-panel",
+                    style={**CARD, "minWidth": 0, "marginBottom": 0},
                     children=[
                         html.H4("Track List", style=SECTION_TITLE),
                         html.Div(id="song-list-container"),
@@ -526,7 +532,7 @@ def update_scatter_and_stores(mode, keyword, genre_values, explicit_mode, tempo_
             max_points=500,
             topk_genres=10,
             selection_name="brush_selection",
-            width=400,
+            width="container",
             height=400,
         )
         spec_out = chart.to_dict()
@@ -560,7 +566,7 @@ def update_distribution(selected_records):
         df = pd.DataFrame()
     else:
         df = pd.DataFrame(selected_records)
-    chart = make_distribution(df, max_points=2000, width=480, height=190)
+    chart = make_distribution(df, max_points=2000, width="container", height=190)
     return chart.to_dict()
 
 

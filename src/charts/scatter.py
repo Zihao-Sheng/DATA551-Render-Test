@@ -109,9 +109,13 @@ def make_scatter(
             .interactive()
         )
 
-    chart = chart.configure(
-        autosize=alt.AutoSizeParams(type="pad", contains="padding")
-    ).configure_view(stroke=None)
+    autosize_type = "fit" if str(width) == "container" else "pad"
+    chart = (
+        chart.configure(
+            autosize=alt.AutoSizeParams(type=autosize_type, contains="padding")
+        )
+        .configure_view(stroke=None)
+    )
 
     meta = {
         "n_total": n_total,
