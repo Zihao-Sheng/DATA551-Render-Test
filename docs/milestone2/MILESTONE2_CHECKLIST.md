@@ -50,11 +50,11 @@
 - [ ] **Canvas Submission Link Added**  
   The GitHub release link is submitted to Canvas.
 
-- [ ] **Optional: README Improved for Users**  
+- [x] **Optional: README Improved for Users**  
   README includes project motivation, what users can do with the dashboard, and a link to the deployed app.
 
-- [ ] **Optional: README Improved for Contributors**  
+- [x] **Optional: README Improved for Contributors**  
   README explains how to install dependencies and run the app locally, and how others can contribute.
 
-- [ ] **Optional: Visual Preview in README**  
+- [x] **Optional: Visual Preview in README**  
   Add a screenshot or short GIF of the dashboard to quickly show functionality on the GitHub landing page.
