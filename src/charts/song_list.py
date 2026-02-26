@@ -132,7 +132,6 @@ def make_song_list_table(
             "overflowX": "auto",
             "borderRadius": "2px",
             "border": "1px solid #d7dde6",
-            "overflow": "hidden",
         },
         style_header={
             "fontFamily": "'Segoe UI', system-ui, -apple-system, Roboto, Arial",

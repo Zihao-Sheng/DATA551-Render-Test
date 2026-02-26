@@ -10,7 +10,7 @@
   Most key views and interactions from the proposal are implemented (around ~3 plots with widgets/interactivity).
 
 - [x] **Usable and Self-Documenting Interface**  
-  The app has a clear title, meaningful labels for widgets and panes, legends for visual encodings, and is usable in full-screen mode.
+  The app has a clear title, meaningful labels for widgets and panes, legends for visual encodings, and is usable in full-screen mode.  
 
 - [x] **Known Limitations and Bugs Identified**  
   Features that are incomplete or not working are clearly identified and documented for TA feedback.
