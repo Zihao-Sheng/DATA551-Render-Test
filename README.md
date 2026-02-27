@@ -66,11 +66,11 @@ Clicking on a specific popular track opens a side panel that highlights audio-si
 
 View the dashboard sketch here:
 
-[Dashboard sketch PDF](./docs/milestone1/dashboard-sketch.pdf)  
+[Dashboard sketch PDF](./doc/milestone1/dashboard-sketch.pdf)  
 
 ### Dashboard Overview (Milestone 2)
 
-![Dashboard Overview](./docs/milestone2/Dashboard_Overview.png)
+![Dashboard Overview](./doc/milestone2/Dashboard_Overview.png)
 
 ## Run Locally
 
@@ -90,7 +90,7 @@ DATA-551-GROUP-7/
 │       └── dataset.csv
 ├── doc/
 │   └── reflection-milestone2.md
-├── docs/
+├── doc/
 │   ├── images/
 │   └── milestone1/
 │       ├── dashboard-sketch.pdf
