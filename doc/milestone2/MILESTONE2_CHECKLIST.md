@@ -18,7 +18,7 @@
 - [x] **Deployment (Heroku / Render) Set Up**  
   The app is successfully deployed and publicly accessible (or deployment platform configured if not using Heroku).
 
-- [ ] **Deployed App Link in README**  
+- [x] **Deployed App Link in README**  
   The public URL of the deployed dashboard is clearly visible near the top of the README.
 
 - [x] **Procfile Configured for src Structure (If Using Heroku)**  
@@ -44,7 +44,7 @@
   - What is not working  
   - Strengths, limitations, and future improvements
 
-- [ ] **Milestone 2 GitHub Release Created**  
+- [x] **Milestone 2 GitHub Release Created**  
   A GitHub release is created with the name of this milestone, capturing the state of the repo for grading.
 
 - [ ] **Canvas Submission Link Added**  
