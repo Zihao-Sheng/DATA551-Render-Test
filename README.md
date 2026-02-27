@@ -81,34 +81,44 @@ View the dashboard sketch here:
 
 ## Repository Structure
 
-```
+```text
 DATA-551-GROUP-7/
-├── assets/
-├── data/
-│   ├── processed/
-│   └── raw/
-│       └── dataset.csv
-├── doc/
-│   └── reflection-milestone2.md
-├── doc/
-│   ├── images/
-│   └── milestone1/
-│       ├── dashboard-sketch.pdf
-│       ├── DATA 551-Group-7-Proposal.pdf
-│       └── MILESTONE1_CHECKLIST.md
-├── reports/
-│   └── Milestone 2.ipynb
-├── src/
-│   ├── __init__.py
-│   └── app.py
-├── .gitignore
-├── CODE_OF_CONDUCT.md
-├── CONTRIBUTING.md
-├── LICENSE
-├── proposal.md
-├── README.md
-└── team-contract.md
-``` 
+|-- assets/
+|-- data/
+|   `-- raw/
+|       `-- dataset.csv
+|-- doc/
+|   |-- milestone1/
+|   |   |-- dashboard-sketch.pdf
+|   |   |-- DATA 551-Group-7-Proposal.pdf
+|   |   `-- MILESTONE1_CHECKLIST.md
+|   `-- milestone2/
+|       |-- Dashboard_Overview.png
+|       |-- MILESTONE2_CHECKLIST.md
+|       `-- reflection-milestone2.md
+|-- reports/
+|   `-- Milestone 2.ipynb
+|-- src/
+|   |-- charts/
+|   |   |-- distribution.py
+|   |   |-- genre_bar.py
+|   |   |-- profile.py
+|   |   |-- scatter.py
+|   |   `-- song_list.py
+|   |-- app.py
+|   |-- filter.py
+|   `-- __init__.py
+|-- .gitignore
+|-- CODE_OF_CONDUCT.md
+|-- CONTRIBUTING.md
+|-- LICENSE
+|-- Procfile
+|-- proposal.md
+|-- README.md
+|-- requirements.txt
+|-- runtime.txt
+`-- team-contract.md
+```
 
 ## For Contributors
 
