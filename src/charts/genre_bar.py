@@ -24,6 +24,11 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
     )
 
     sort_order = agg.sort_values("avg_popularity", ascending=False)["track_genre"].tolist()
+    n_genres = len(sort_order)
+    dense = n_genres >= 10
+    label_angle = -55 if dense else -25
+    label_limit = 55 if dense else 80
+    label_padding = 2 if dense else 6
 
     bars = (
         alt.Chart(agg)
@@ -34,11 +39,13 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
                 sort=sort_order,
                 title=None,
                 axis=alt.Axis(
-                    labelAngle=-25,
-                    labelLimit=80,
+                    labelAngle=label_angle,
+                    labelLimit=label_limit,
                     labelAlign="right",
                     labelBaseline="top",
-                    labelPadding=6,
+                    labelPadding=label_padding,
+                    labelOverlap="greedy",
+                    labelExpr="length(datum.label) > 11 ? slice(datum.label, 0, 11) + '…' : datum.label",
                 ),
             ),
             y=alt.Y(
@@ -82,12 +89,14 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
         )
     )
 
+    base = bars if dense else (bars + text)
+
     return (
-        (bars + text)
+        base
         .properties(
             width=width,
             height=height,
-            padding={"top": 8, "right": 8, "bottom": 36, "left": 8},
+            padding={"top": 8, "right": 8, "bottom": 48 if dense else 36, "left": 8},
         )
         .configure(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
         .configure_view(stroke=None)

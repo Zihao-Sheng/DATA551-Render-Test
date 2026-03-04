@@ -9,6 +9,7 @@ def make_song_list_table(
     df: pd.DataFrame,
     *,
     max_rows: int = 5000,
+    liked_track_ids: list[str] | None = None,
 ) -> dash_table.DataTable:
     """
     Create a sortable Dash DataTable for track listing.
@@ -28,7 +29,10 @@ def make_song_list_table(
     """
     # Choose columns (only keep what you want to show)
     # Adjust these names if your dataset uses different ones.
+    liked_set = {str(x) for x in (liked_track_ids or [])}
+
     wanted = [
+        "track_id",
         "track_name",
         "artists",
         "track_genre",
@@ -53,12 +57,22 @@ def make_song_list_table(
         if "popularity" in view.columns:
             view["popularity"] = pd.to_numeric(view["popularity"], errors="coerce").fillna(0).astype(int)
 
+        if "track_id" in view.columns:
+            view["track_id"] = view["track_id"].astype(str)
+
+        # A clickable star column for like/unlike actions.
+        view.insert(0, "liked", view["track_id"].map(lambda tid: "★" if tid in liked_set else "☆"))
         data = view.head(max_rows).to_dict("records")
 
     # Column definitions (with types for better sorting)
     column_defs = []
-    for c in cols:
-        if c in {"popularity"}:
+    display_cols = ["liked"] + cols
+    for c in display_cols:
+        if c == "track_id":
+            column_defs.append({"name": "track_id", "id": c, "type": "text"})
+        elif c == "liked":
+            column_defs.append({"name": "★", "id": c, "type": "text"})
+        elif c in {"popularity"}:
             column_defs.append({"name": "Popularity", "id": c, "type": "numeric"})
         elif c in {"energy", "valence", "danceability"}:
             column_defs.append({"name": c.capitalize(), "id": c, "type": "numeric"})
@@ -76,6 +90,8 @@ def make_song_list_table(
         {"if": {"row_index": "odd"}, "backgroundColor": "#fbfcfd"},
         {"if": {"state": "active"}, "backgroundColor": "#eef8f1", "border": "1px solid #b9e3c6"},
         {"if": {"state": "selected"}, "backgroundColor": "#e6f5eb", "border": "1px solid #8fd3a7"},
+        {"if": {"column_id": "liked"}, "textAlign": "center", "fontSize": "16px", "padding": "0"},
+        {"if": {"filter_query": "{liked} = '★'"}, "column_id": "liked", "color": "#f4b400"},
         {"if": {"column_id": "track_name"}, "fontWeight": "600", "color": "#1f2937"},
         {"if": {"column_id": "artists"}, "color": "#4b5563"},
     ]
@@ -119,17 +135,18 @@ def make_song_list_table(
         id="song-table",
         data=data,
         columns=column_defs,
+        hidden_columns=["track_id"],
         sort_action="native",        # <- click headers to sort
         sort_mode="multi",           # <- allow multi-column sort with shift-click
         page_action="native",
         page_size=15,          # <- use scroll instead of pages
-        fill_width=False,
+        fill_width=True,
         style_as_list_view=True,
         style_table={
-            "width": "1050px",
-            "maxWidth": "100%",
+            "width": "100%",
+            "maxWidth": "1050px",
             "margin": "0 auto",
-            "overflowX": "auto",
+            "overflowX": "hidden",
             "borderRadius": "2px",
             "border": "1px solid #d7dde6",
         },
@@ -147,7 +164,7 @@ def make_song_list_table(
             "overflow": "hidden",
         },
         style_cell={
-            "padding": "6px 8px",
+            "padding": "6px 6px",
             "fontSize": "11px",
             "backgroundColor": "white",
             "borderBottom": "1px solid #f1f5f9",
@@ -159,13 +176,14 @@ def make_song_list_table(
             "maxWidth": "80px",
         },
         style_cell_conditional=[
-            {"if": {"column_id": "track_name"}, "width": "220px", "minWidth": "220px", "maxWidth": "220px"},
-            {"if": {"column_id": "artists"}, "width": "270px", "minWidth": "270px", "maxWidth": "270px"},
-            {"if": {"column_id": "track_genre"}, "width": "150px", "minWidth": "150px", "maxWidth": "150px"},
-            {"if": {"column_id": "popularity"}, "width": "120px", "minWidth": "120px", "maxWidth": "120px"},
-            {"if": {"column_id": "energy"}, "width": "90px", "minWidth": "90px", "maxWidth": "90px"},
-            {"if": {"column_id": "valence"}, "width": "90px", "minWidth": "90px", "maxWidth": "90px"},
-            {"if": {"column_id": "danceability"}, "width": "110px", "minWidth": "110px", "maxWidth": "110px"},
+            {"if": {"column_id": "liked"}, "width": "42px", "minWidth": "42px", "maxWidth": "42px"},
+            {"if": {"column_id": "track_name"}, "width": "180px", "minWidth": "180px", "maxWidth": "180px"},
+            {"if": {"column_id": "artists"}, "width": "220px", "minWidth": "220px", "maxWidth": "220px"},
+            {"if": {"column_id": "track_genre"}, "width": "130px", "minWidth": "130px", "maxWidth": "130px"},
+            {"if": {"column_id": "popularity"}, "width": "110px", "minWidth": "110px", "maxWidth": "110px"},
+            {"if": {"column_id": "energy"}, "width": "85px", "minWidth": "85px", "maxWidth": "85px"},
+            {"if": {"column_id": "valence"}, "width": "85px", "minWidth": "85px", "maxWidth": "85px"},
+            {"if": {"column_id": "danceability"}, "width": "100px", "minWidth": "100px", "maxWidth": "100px"},
         ],
         style_data_conditional=style_conditional,
         css=[

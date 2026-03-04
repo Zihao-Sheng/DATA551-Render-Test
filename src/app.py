@@ -22,6 +22,13 @@ DATA_PATH = ROOT / "data" / "raw" / "dataset.csv"
 data = pd.read_csv(DATA_PATH)
 data["_track_name_lc"] = data["track_name"].astype(str).str.lower()
 data["_artists_lc"] = data["artists"].astype(str).str.lower()
+TRACK_LOOKUP = (
+    data[["track_id", "track_name", "artists", "track_genre", "popularity"]]
+    .dropna(subset=["track_id"])
+    .drop_duplicates("track_id")
+    .assign(track_id=lambda d: d["track_id"].astype(str))
+    .set_index("track_id")
+)
 
 AUDIO_FEATURES = [
     "danceability", "energy", "valence",
@@ -103,10 +110,18 @@ BADGE = {
 }
 
 
-def _compute_filtered_df(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds):
+def _compute_filtered_df(
+    keyword,
+    genre_values,
+    explicit_mode,
+    tempo_bounds,
+    pop_bounds,
+    liked_filter_values=None,
+    liked_tracks=None,
+):
     explicit_val = {"explicit": True, "clean": False}.get(explicit_mode)
     genre_set = set(genre_values) if genre_values else None
-    return filter_tracks(
+    filtered = filter_tracks(
         data,
         keyword=keyword or None,
         genres=genre_set,
@@ -115,6 +130,14 @@ def _compute_filtered_df(keyword, genre_values, explicit_mode, tempo_bounds, pop
         explicit=explicit_val,
         copy=False,
     )
+    liked_only = bool(liked_filter_values and "liked" in liked_filter_values)
+    if not liked_only:
+        return filtered
+
+    liked_set = {str(x) for x in (liked_tracks or []) if str(x)}
+    if not liked_set or "track_id" not in filtered.columns:
+        return filtered.iloc[0:0]
+    return filtered[filtered["track_id"].astype(str).isin(liked_set)]
 
 
 def _compute_selected_df(filtered_df, bounds):
@@ -223,6 +246,16 @@ app.layout = html.Div(
                                 {"label": " Clean only", "value": "clean"},
                             ],
                             value="all",
+                            style={"rowGap": "5px", "display": "grid"},
+                            labelStyle={"display": "flex", "alignItems": "center", "gap": "8px", "fontSize": "13px"},
+                            inputStyle={"accentColor": GREEN},
+                        ),
+
+                        html.Div("Liked", style=FILTER_LABEL),
+                        dcc.Checklist(
+                            id="liked-only",
+                            options=[{"label": " Liked only", "value": "liked"}],
+                            value=[],
                             style={"rowGap": "5px", "display": "grid"},
                             labelStyle={"display": "flex", "alignItems": "center", "gap": "8px", "fontSize": "13px"},
                             inputStyle={"accentColor": GREEN},
@@ -394,7 +427,13 @@ app.layout = html.Div(
                     style={**CARD, "minWidth": 0, "marginBottom": 0},
                     children=[
                         html.H4("Track List", style=SECTION_TITLE),
+                        html.Div(
+                            "Click the star before Title to like/unlike a track.",
+                            style={"fontSize": "11px", "color": "#888", "marginBottom": "8px"},
+                        ),
                         html.Div(id="song-list-container"),
+                        html.H4("Liked Songs", style={**SECTION_TITLE, "marginTop": "14px", "marginBottom": "8px"}),
+                        html.Div(id="liked-songs-container"),
                     ],
                 ),
             ],
@@ -402,6 +441,7 @@ app.layout = html.Div(
 
         dcc.Store(id="brush-bounds-store"),
         dcc.Store(id="selected-genres-store", data=[]),
+        dcc.Store(id="liked-tracks-store", data=[], storage_type="local"),
     ],
 )
 
@@ -491,12 +531,22 @@ def render_selected_genres_box(selected_genres):
     Input("keyword", "value"),
     Input("selected-genres-store", "data"),
     Input("explicit", "value"),
+    Input("liked-only", "value"),
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
+    Input("liked-tracks-store", "data"),
     Input("scatter", "signalData"),
 )
-def update_scatter_and_stores(mode, keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds, signal_data):
-    filtered_df = _compute_filtered_df(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds)
+def update_scatter_and_stores(mode, keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, liked_tracks, signal_data):
+    filtered_df = _compute_filtered_df(
+        keyword,
+        genre_values,
+        explicit_mode,
+        tempo_bounds,
+        pop_bounds,
+        liked_filter_values,
+        liked_tracks,
+    )
 
     triggered = ctx.triggered_id
 
@@ -557,14 +607,24 @@ def update_scatter_and_stores(mode, keyword, genre_values, explicit_mode, tempo_
     Input("keyword", "value"),
     Input("selected-genres-store", "data"),
     Input("explicit", "value"),
+    Input("liked-only", "value"),
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
     Input("brush-bounds-store", "data"),
+    Input("liked-tracks-store", "data"),
 )
-def update_genre_bar(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds, bounds):
-    filtered_df = _compute_filtered_df(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds)
+def update_genre_bar(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
+    filtered_df = _compute_filtered_df(
+        keyword,
+        genre_values,
+        explicit_mode,
+        tempo_bounds,
+        pop_bounds,
+        liked_filter_values,
+        liked_tracks,
+    )
     df = _compute_selected_df(filtered_df, bounds)
-    chart = make_genre_bar(df, top_n=12, width="container", height=265)
+    chart = make_genre_bar(df, top_n=10, width="container", height=265)
     return chart.to_dict()
 
 
@@ -573,12 +633,22 @@ def update_genre_bar(keyword, genre_values, explicit_mode, tempo_bounds, pop_bou
     Input("keyword", "value"),
     Input("selected-genres-store", "data"),
     Input("explicit", "value"),
+    Input("liked-only", "value"),
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
     Input("brush-bounds-store", "data"),
+    Input("liked-tracks-store", "data"),
 )
-def update_distribution(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds, bounds):
-    filtered_df = _compute_filtered_df(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds)
+def update_distribution(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
+    filtered_df = _compute_filtered_df(
+        keyword,
+        genre_values,
+        explicit_mode,
+        tempo_bounds,
+        pop_bounds,
+        liked_filter_values,
+        liked_tracks,
+    )
     df = _compute_selected_df(filtered_df, bounds)
     chart = make_distribution(df, max_points=2000, width=480, height=190)
     return chart.to_dict()
@@ -589,12 +659,22 @@ def update_distribution(keyword, genre_values, explicit_mode, tempo_bounds, pop_
     Input("keyword", "value"),
     Input("selected-genres-store", "data"),
     Input("explicit", "value"),
+    Input("liked-only", "value"),
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
     Input("brush-bounds-store", "data"),
+    Input("liked-tracks-store", "data"),
 )
-def update_audio_profile(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds, bounds):
-    filtered_df = _compute_filtered_df(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds)
+def update_audio_profile(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
+    filtered_df = _compute_filtered_df(
+        keyword,
+        genre_values,
+        explicit_mode,
+        tempo_bounds,
+        pop_bounds,
+        liked_filter_values,
+        liked_tracks,
+    )
     df = _compute_selected_df(filtered_df, bounds)
     chart = make_audio_profile(df, width="container", height=290)
     return chart.to_dict()
@@ -605,19 +685,100 @@ def update_audio_profile(keyword, genre_values, explicit_mode, tempo_bounds, pop
     Input("keyword", "value"),
     Input("selected-genres-store", "data"),
     Input("explicit", "value"),
+    Input("liked-only", "value"),
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
     Input("brush-bounds-store", "data"),
+    Input("liked-tracks-store", "data"),
 )
-def update_song_list(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds, bounds):
-    filtered_df = _compute_filtered_df(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds)
+def update_song_list(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
+    filtered_df = _compute_filtered_df(
+        keyword,
+        genre_values,
+        explicit_mode,
+        tempo_bounds,
+        pop_bounds,
+        liked_filter_values,
+        liked_tracks,
+    )
     df = _compute_selected_df(filtered_df, bounds)
     if df is None or len(df) == 0:
         return html.Div(
             "No tracks match your filters.",
             style={"fontSize": "13px", "color": "#888", "padding": "16px 0"},
         )
-    return make_song_list_table(df, max_rows=5000)
+    return make_song_list_table(df, max_rows=5000, liked_track_ids=liked_tracks)
+
+
+@callback(
+    Output("liked-tracks-store", "data"),
+    Input("song-table", "active_cell"),
+    Input({"type": "similar-like", "track_id": ALL}, "n_clicks"),
+    State("song-table", "derived_viewport_data"),
+    State("song-table", "data"),
+    State("liked-tracks-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_liked_tracks(active_cell, _similar_like_clicks, viewport_data, table_data, liked_tracks):
+    liked = [str(x) for x in (liked_tracks or [])]
+    triggered = ctx.triggered_id
+
+    track_id = None
+    if isinstance(triggered, dict) and triggered.get("type") == "similar-like":
+        track_id = str(triggered.get("track_id", "")).strip()
+    elif triggered == "song-table":
+        if not active_cell or active_cell.get("column_id") != "liked":
+            return no_update
+        row_idx = active_cell.get("row")
+        visible_rows = viewport_data or table_data or []
+        if row_idx is None or row_idx < 0 or row_idx >= len(visible_rows):
+            return no_update
+        track_id = str(visible_rows[row_idx].get("track_id", "")).strip()
+
+    if not track_id:
+        return no_update
+
+    if track_id in liked:
+        liked = [x for x in liked if x != track_id]
+    else:
+        liked.append(track_id)
+    return liked
+
+
+@callback(
+    Output("liked-songs-container", "children"),
+    Input("liked-tracks-store", "data"),
+)
+def render_liked_songs(liked_tracks):
+    liked = [str(x) for x in (liked_tracks or [])]
+    if not liked:
+        return html.Div("No liked songs yet.", style={"fontSize": "12px", "color": "#9aa1ab"})
+
+    rows = []
+    for tid in liked:
+        if tid not in TRACK_LOOKUP.index:
+            continue
+        row = TRACK_LOOKUP.loc[tid]
+        rows.append(
+            html.Div(
+                style={"padding": "8px 10px", "borderBottom": "1px solid #f0f2f5"},
+                children=[
+                    html.Div(f"★ {row['track_name']}", style={"fontSize": "12px", "fontWeight": "600", "color": "#1a1a2e"}),
+                    html.Div(
+                        f"{row['artists']}  ·  {row['track_genre']}  ·  Pop {int(row['popularity'])}",
+                        style={"fontSize": "11px", "color": "#888"},
+                    ),
+                ],
+            )
+        )
+
+    if not rows:
+        return html.Div("No liked songs yet.", style={"fontSize": "12px", "color": "#9aa1ab"})
+
+    return html.Div(
+        rows,
+        style={"border": "1px solid #e9edf2", "borderRadius": "10px", "overflow": "hidden"},
+    )
 
 
 @callback(
@@ -626,14 +787,24 @@ def update_song_list(keyword, genre_values, explicit_mode, tempo_bounds, pop_bou
     Input("keyword", "value"),
     Input("selected-genres-store", "data"),
     Input("explicit", "value"),
+    Input("liked-only", "value"),
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
     Input("brush-bounds-store", "data"),
+    Input("liked-tracks-store", "data"),
     Input("similar-track-dropdown", "search_value"),
     State("similar-track-dropdown", "value"),
 )
-def update_similar_dropdown(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds, bounds, search_value, current_value):
-    filtered_df = _compute_filtered_df(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds)
+def update_similar_dropdown(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks, search_value, current_value):
+    filtered_df = _compute_filtered_df(
+        keyword,
+        genre_values,
+        explicit_mode,
+        tempo_bounds,
+        pop_bounds,
+        liked_filter_values,
+        liked_tracks,
+    )
     selected_df = _compute_selected_df(filtered_df, bounds)
     if selected_df is None or len(selected_df) == 0:
         return [], None
@@ -677,18 +848,28 @@ def update_similar_dropdown(keyword, genre_values, explicit_mode, tempo_bounds, 
     Input("keyword", "value"),
     Input("selected-genres-store", "data"),
     Input("explicit", "value"),
+    Input("liked-only", "value"),
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
     Input("brush-bounds-store", "data"),
+    Input("liked-tracks-store", "data"),
 )
-def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds, bounds):
+def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
     if not track_id:
         return html.Div(
             "Select a track above to discover audio-similar but underrated songs.",
             style={"fontSize": "12px", "color": "#aaa", "padding": "8px 0", "lineHeight": "1.5"},
         )
 
-    filtered_df = _compute_filtered_df(keyword, genre_values, explicit_mode, tempo_bounds, pop_bounds)
+    filtered_df = _compute_filtered_df(
+        keyword,
+        genre_values,
+        explicit_mode,
+        tempo_bounds,
+        pop_bounds,
+        liked_filter_values,
+        liked_tracks,
+    )
     selected_df = _compute_selected_df(filtered_df, bounds)
     pool = selected_df if selected_df is not None and len(selected_df) > 0 else filtered_df
     required = ["track_id", "track_name", "artists", "track_genre", "popularity", *AUDIO_FEATURES]
@@ -727,18 +908,21 @@ def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, tempo_
             (candidates["popularity"] < ref_pop)
         ]
         .nsmallest(10, "_dist")
-        [["track_name", "artists", "track_genre", "popularity", "energy", "valence", "danceability"]]
+        [["track_id", "track_name", "artists", "track_genre", "popularity", "energy", "valence", "danceability"]]
     )
 
     if candidates.empty:
         return html.Div("No similar lower-popularity tracks found.", style={"fontSize": "12px", "color": "#888"})
 
     candidates = candidates.copy()
+    liked_set = {str(x) for x in (liked_tracks or [])}
     for col in ["energy", "valence", "danceability"]:
         candidates[col] = candidates[col].round(2)
 
     rows = []
     for _, row in candidates.iterrows():
+        cand_id = str(row["track_id"])
+        is_liked = cand_id in liked_set
         rows.append(
             html.Div(
                 style={
@@ -748,9 +932,35 @@ def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, tempo_
                 },
                 children=[
                     html.Div(
-                        row["track_name"],
-                        style={"fontWeight": "600", "color": "#1a1a2e", "overflow": "hidden",
-                               "textOverflow": "ellipsis", "whiteSpace": "nowrap"},
+                        style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "10px"},
+                        children=[
+                            html.Div(
+                                row["track_name"],
+                                style={
+                                    "fontWeight": "600",
+                                    "color": "#1a1a2e",
+                                    "overflow": "hidden",
+                                    "textOverflow": "ellipsis",
+                                    "whiteSpace": "nowrap",
+                                    "flex": "1",
+                                },
+                            ),
+                            html.Button(
+                                "★" if is_liked else "☆",
+                                id={"type": "similar-like", "track_id": cand_id},
+                                n_clicks=0,
+                                title="Like this track",
+                                style={
+                                    "border": "none",
+                                    "background": "transparent",
+                                    "cursor": "pointer",
+                                    "fontSize": "18px",
+                                    "lineHeight": "1",
+                                    "padding": "0 2px",
+                                    "color": "#f4b400" if is_liked else "#bcc3cc",
+                                },
+                            ),
+                        ],
                     ),
                     html.Div(
                         f"{row['artists']}  ·  {row['track_genre']}",
