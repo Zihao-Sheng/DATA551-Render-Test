@@ -21,7 +21,23 @@ from filter import filter_tracks
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "raw" / "dataset.csv"
-data = pd.read_csv(DATA_PATH)
+REQUIRED_COLUMNS = [
+    "track_id",
+    "artists",
+    "track_name",
+    "track_genre",
+    "popularity",
+    "explicit",
+    "tempo",
+    "danceability",
+    "energy",
+    "valence",
+    "acousticness",
+    "speechiness",
+    "liveness",
+    "instrumentalness",
+]
+data = pd.read_csv(DATA_PATH, usecols=REQUIRED_COLUMNS)
 data["_track_name_lc"] = data["track_name"].astype(str).str.lower()
 data["_artists_lc"] = data["artists"].astype(str).str.lower()
 data["track_id"] = data["track_id"].astype(str)
