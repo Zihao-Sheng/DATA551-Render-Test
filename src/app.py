@@ -1,5 +1,6 @@
 ﻿import sys
 from pathlib import Path
+from functools import lru_cache
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dash import Dash, html, dcc, Input, Output, State, callback, ctx, no_update, ALL
@@ -23,6 +24,8 @@ DATA_PATH = ROOT / "data" / "raw" / "dataset.csv"
 data = pd.read_csv(DATA_PATH)
 data["_track_name_lc"] = data["track_name"].astype(str).str.lower()
 data["_artists_lc"] = data["artists"].astype(str).str.lower()
+data["track_id"] = data["track_id"].astype(str)
+_track_id_idx = data.set_index("track_id", drop=False, verify_integrity=False)
 TRACK_LOOKUP = {
     (str(r["track_name"]).strip().lower(), str(r["artists"]).strip().lower()): str(r["track_id"]).strip()
     for _, r in data[["track_name", "artists", "track_id"]].dropna().drop_duplicates("track_id").iterrows()
@@ -203,10 +206,16 @@ def _extract_track_id_from_scatter_signal(signal_data):
 def _get_track_row(track_id: str):
     if not track_id:
         return None
-    rows = data[data["track_id"].astype(str) == str(track_id)]
-    if rows.empty:
+    tid = str(track_id).strip()
+    if not tid:
         return None
-    row = rows.iloc[0].copy()
+    if tid not in _track_id_idx.index:
+        return None
+    rows = _track_id_idx.loc[tid]
+    if isinstance(rows, pd.DataFrame):
+        row = rows.iloc[0].copy()
+    else:
+        row = rows.copy()
     for c in ["popularity", "tempo", *PROFILE_AXES]:
         if c in row.index:
             row[c] = pd.to_numeric(row[c], errors="coerce")
@@ -240,6 +249,50 @@ def _get_scatter_genre_color(track_genre: str, filtered_df: pd.DataFrame, *, max
     return color_map.get(track_genre, color_map["Other"])
 
 
+def _normalize_key_seq(values):
+    return tuple(sorted(str(v) for v in (values or []) if str(v)))
+
+
+def _normalize_bounds(bounds, default_lo, default_hi):
+    if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
+        lo = default_lo if bounds[0] is None else bounds[0]
+        hi = default_hi if bounds[1] is None else bounds[1]
+        return float(lo), float(hi)
+    return float(default_lo), float(default_hi)
+
+
+@lru_cache(maxsize=256)
+def _compute_filtered_index_cached(
+    keyword_key,
+    genre_key,
+    explicit_mode_key,
+    tempo_lo,
+    tempo_hi,
+    pop_lo,
+    pop_hi,
+    liked_only,
+    liked_key,
+):
+    explicit_val = {"explicit": True, "clean": False}.get(explicit_mode_key)
+    genre_set = set(genre_key) if genre_key else None
+    filtered = filter_tracks(
+        data,
+        keyword=keyword_key or None,
+        genres=genre_set,
+        tempo_range=[tempo_lo, tempo_hi],
+        popularity_range=[pop_lo, pop_hi],
+        explicit=explicit_val,
+        copy=False,
+    )
+    if not liked_only:
+        return tuple(filtered.index.tolist())
+
+    liked_set = set(liked_key)
+    if not liked_set or "track_id" not in filtered.columns:
+        return tuple()
+    return tuple(filtered[filtered["track_id"].isin(liked_set)].index.tolist())
+
+
 def _compute_filtered_df(
     keyword,
     genre_values,
@@ -249,25 +302,27 @@ def _compute_filtered_df(
     liked_filter_values=None,
     liked_tracks=None,
 ):
-    explicit_val = {"explicit": True, "clean": False}.get(explicit_mode)
-    genre_set = set(genre_values) if genre_values else None
-    filtered = filter_tracks(
-        data,
-        keyword=keyword or None,
-        genres=genre_set,
-        tempo_range=tempo_bounds,
-        popularity_range=pop_bounds,
-        explicit=explicit_val,
-        copy=False,
-    )
+    keyword_key = (keyword or "").strip().lower()
+    genre_key = _normalize_key_seq(genre_values)
+    tempo_lo, tempo_hi = _normalize_bounds(tempo_bounds, TEMPO_MIN, TEMPO_MAX)
+    pop_lo, pop_hi = _normalize_bounds(pop_bounds, POP_MIN, POP_MAX)
     liked_only = bool(liked_filter_values and "liked" in liked_filter_values)
-    if not liked_only:
-        return filtered
+    liked_key = _normalize_key_seq(liked_tracks) if liked_only else tuple()
 
-    liked_set = {str(x) for x in (liked_tracks or []) if str(x)}
-    if not liked_set or "track_id" not in filtered.columns:
-        return filtered.iloc[0:0]
-    return filtered[filtered["track_id"].astype(str).isin(liked_set)]
+    idx = _compute_filtered_index_cached(
+        keyword_key,
+        genre_key,
+        explicit_mode if explicit_mode in {"all", "explicit", "clean"} else str(explicit_mode or "all"),
+        tempo_lo,
+        tempo_hi,
+        pop_lo,
+        pop_hi,
+        liked_only,
+        liked_key,
+    )
+    if not idx:
+        return data.iloc[0:0]
+    return data.loc[list(idx)]
 
 
 def _compute_selected_df(filtered_df, bounds):
@@ -1413,3 +1468,5 @@ def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, liked_
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+
