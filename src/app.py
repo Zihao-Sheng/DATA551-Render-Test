@@ -23,6 +23,10 @@ DATA_PATH = ROOT / "data" / "raw" / "dataset.csv"
 data = pd.read_csv(DATA_PATH)
 data["_track_name_lc"] = data["track_name"].astype(str).str.lower()
 data["_artists_lc"] = data["artists"].astype(str).str.lower()
+TRACK_LOOKUP = {
+    (str(r["track_name"]).strip().lower(), str(r["artists"]).strip().lower()): str(r["track_id"]).strip()
+    for _, r in data[["track_name", "artists", "track_id"]].dropna().drop_duplicates("track_id").iterrows()
+}
 
 AUDIO_FEATURES = [
     "danceability", "energy", "valence",
@@ -145,6 +149,16 @@ def _extract_track_id_from_scatter_signal(signal_data):
         if isinstance(node, dict):
             if "track_id" in node and node["track_id"] is not None:
                 return _norm(node["track_id"])
+
+            # Fallback for environments where signal payload omits track_id
+            # but still carries track text fields.
+            tn = node.get("track_name")
+            ar = node.get("artists")
+            if tn is not None and ar is not None:
+                key = (str(tn).strip().lower(), str(ar).strip().lower())
+                tid = TRACK_LOOKUP.get(key)
+                if tid:
+                    return _norm(tid)
 
             # Some Vega payloads encode selected rows as a list of dict values.
             values_node = node.get("values")
