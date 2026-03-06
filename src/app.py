@@ -691,11 +691,14 @@ app.layout = html.Div(
                                     style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
                                     children="Distribution of key audio features for the current selection.",
                                 ),
-                                dvc.Vega(
-                                    id="distribution",
-                                    spec={},
-                                    opt={"renderer": "svg", "actions": False},
-                                    style={"width": "100%"},
+                                html.Div(
+                                    dvc.Vega(
+                                        id="distribution",
+                                        spec={},
+                                        opt={"renderer": "svg", "actions": False},
+                                        style={"width": "100%", "maxWidth": "100%"},
+                                    ),
+                                    style={"display": "flex", "justifyContent": "center"},
                                 ),
                             ],
                         ),
@@ -930,12 +933,18 @@ def update_scatter_and_stores(
     stats_children = [
         html.Span(f"Total  {n_total:,}", style={**BADGE, "backgroundColor": "#e8f5e9", "color": "#2d6a4f"}),
         html.Span(f"Filtered  {n_filtered:,}", style={**BADGE, "backgroundColor": "#fff3e0", "color": "#a0522d"}),
-        html.Span(f"Selected  {n_selected:,}", style={**BADGE, "backgroundColor": "#e3f2fd", "color": "#1565c0"}),
     ]
+    if n_selected != n_filtered:
+        stats_children.append(
+            html.Span(f"Selected  {n_selected:,}", style={**BADGE, "backgroundColor": "#e3f2fd", "color": "#1565c0"})
+        )
 
     filter_hint = [
         html.Div(f"{n_filtered:,} tracks after filters", style={"marginBottom": "2px"}),
-        html.Div(f"{n_selected:,} tracks selected" + (" (brush active)" if bounds else ""), style={"color": GREEN if bounds else "#888"}),
+        html.Div(
+            (f"{n_selected:,} tracks selected (brush active)" if bounds and (n_selected != n_filtered) else "Brush on scatterplot to select."),
+            style={"color": GREEN if bounds and (n_selected != n_filtered) else "#888"},
+        ),
     ]
 
     n_shown = min(n_filtered, 500)
@@ -990,7 +999,7 @@ def update_genre_bar(selected_index_data):
 )
 def update_distribution(selected_index_data):
     df = _df_from_filtered_index(selected_index_data)
-    chart = make_distribution(df, max_points=2000, width=360, height=160)
+    chart = make_distribution(df, max_points=2000, width=420, height=220)
     return chart.to_dict()
 
 
