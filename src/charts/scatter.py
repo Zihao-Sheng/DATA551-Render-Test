@@ -1,6 +1,8 @@
 import altair as alt
 import pandas as pd
 
+CARD_BG = "#f8fdf9"
+
 BRIGHT_PALETTE = [
     "#1DB954", "#FF7A00", "#4C7DFF", "#E71D36",
     "#9B5DE5", "#00BBF9", "#F15BB5", "#FFD166",
@@ -33,7 +35,22 @@ def make_scatter(
 
     n_total = len(df)
     sampled = n_total > max_points
-    plot_df = df.sample(n=max_points, random_state=42) if sampled else df.copy()
+    if sampled:
+        # Stable downsampling: pick a deterministic subset by track_id hash
+        # so points don't "jump" between callback updates.
+        if "track_id" in df.columns:
+            work = df.copy()
+            hash_series = pd.util.hash_pandas_object(work["track_id"].astype(str), index=False)
+            plot_df = (
+                work.assign(_stable_hash=hash_series.values)
+                .sort_values("_stable_hash", kind="mergesort")
+                .head(max_points)
+                .drop(columns=["_stable_hash"])
+            )
+        else:
+            plot_df = df.sample(n=max_points, random_state=42)
+    else:
+        plot_df = df.copy()
 
     top = plot_df["track_genre"].value_counts().head(topk_genres).index
     plot_df = plot_df.assign(
@@ -125,7 +142,8 @@ def make_scatter(
         chart.configure(
             autosize=alt.AutoSizeParams(type=autosize_type, contains="padding")
         )
-        .configure_view(stroke=None)
+        .configure(background=CARD_BG)
+        .configure_view(stroke=None, fill=CARD_BG)
     )
 
     meta = {

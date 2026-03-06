@@ -1,6 +1,8 @@
 import altair as alt
 import pandas as pd
 
+CARD_BG = "#f8fdf9"
+
 FEATURES = ["danceability", "energy", "valence", "acousticness"]
 PALETTE = ["#1DB954", "#FF7A00", "#4C7DFF", "#9B5DE5"]
 
@@ -62,8 +64,9 @@ def make_distribution(df: pd.DataFrame, *, max_points: int = 3000, width: int = 
 
     return (
         chart
+        .configure(background=CARD_BG)
         .configure(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
-        .configure_view(stroke=None)
+        .configure_view(stroke=None, fill=CARD_BG)
         .configure_axis(labelFontSize=11, titleFontSize=11)
         .configure_title(fontSize=13, fontWeight=600, anchor="start")
     )

@@ -1,6 +1,8 @@
 import altair as alt
 import pandas as pd
 
+CARD_BG = "#f8fdf9"
+
 
 def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, height: int = 300):
     if df is None or len(df) == 0:
@@ -98,8 +100,9 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
             height=height,
             padding={"top": 8, "right": 8, "bottom": 48 if dense else 36, "left": 8},
         )
+        .configure(background=CARD_BG)
         .configure(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
-        .configure_view(stroke=None)
+        .configure_view(stroke=None, fill=CARD_BG)
         .configure_axis(labelFontSize=11, titleFontSize=11)
         .configure_title(fontSize=13, fontWeight=600, anchor="start")
     )

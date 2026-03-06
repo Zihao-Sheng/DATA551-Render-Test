@@ -87,11 +87,15 @@ def make_song_list_table(
 
     # Visual polish to match dashboard cards
     style_conditional = [
-        {"if": {"row_index": "odd"}, "backgroundColor": "#fbfcfd"},
+        {"if": {"row_index": "odd"}, "backgroundColor": "#fbfdfb"},
         # Keep active-cell cue subtle; row-level feedback is handled via selected cells.
-        {"if": {"state": "active"}, "backgroundColor": "#f3f7f5", "border": "1px solid #cddbd3"},
-        {"if": {"state": "selected"}, "backgroundColor": "#dff3e7", "border": "1px solid #69b88a"},
-        {"if": {"column_id": "liked"}, "textAlign": "center", "fontSize": "16px", "padding": "0"},
+        {"if": {"state": "active"}, "backgroundColor": "#f3fbf6", "border": "1px solid #69b88a"},
+        {"if": {"state": "selected"}, "backgroundColor": "#e5f4ea", "border": "1px solid #69b88a"},
+        {"if": {"column_id": "liked"}, "textAlign": "center", "fontSize": "16px", "padding": "0", "color": "#9aa8a0"},
+        {"if": {"column_id": "energy"}, "color": "#2f3d35"},
+        {"if": {"column_id": "valence"}, "color": "#2f3d35"},
+        {"if": {"column_id": "danceability"}, "color": "#2f3d35"},
+        {"if": {"column_id": "track_genre"}, "color": "#2f3d35"},
         {"if": {"filter_query": "{liked} = '★'"}, "column_id": "liked", "color": "#f4b400"},
         {"if": {"column_id": "track_name"}, "fontWeight": "600", "color": "#1f2937"},
         {"if": {"column_id": "artists"}, "color": "#4b5563"},
@@ -122,10 +126,10 @@ def make_song_list_table(
                         f"linear-gradient(90deg, "
                         f"transparent 0%, "
                         f"transparent 8%, "
-                        f"#67b567 8%, "
-                        f"#67b567 {end}%, "
-                        f"#dce8dc {end}%, "
-                        f"#dce8dc 92%, "
+                        f"#5aa874 8%, "
+                        f"#5aa874 {end}%, "
+                        f"#e2eee7 {end}%, "
+                        f"#e2eee7 92%, "
                         f"transparent 92%, "
                         f"transparent 100%)"
                     ),
@@ -148,48 +152,52 @@ def make_song_list_table(
             "maxWidth": "1050px",
             "margin": "0 auto",
             "overflowX": "hidden",
-            "borderRadius": "2px",
-            "border": "1px solid #d7dde6",
+            "borderRadius": "6px",
+            "border": "1px solid #d7e7dd",
         },
         style_header={
             "fontFamily": "'Segoe UI', system-ui, -apple-system, Roboto, Arial",
             "fontWeight": "700",
-            "backgroundColor": "#edf1f4",
-            "color": "#1f2937",
-            "borderBottom": "1px solid #d7dde6",
-            "padding": "10px 10px",
-            "fontSize": "12px",
+            "backgroundColor": "#eef5f1",
+            "color": "#1f3b2d",
+            "borderBottom": "1px solid #d7e7dd",
+            "padding": "8px 8px",
+            "fontSize": "11px",
             "letterSpacing": "0.1px",
             "whiteSpace": "nowrap",
             "textOverflow": "ellipsis",
             "overflow": "hidden",
         },
         style_cell={
-            "padding": "6px 6px",
-            "fontSize": "11px",
+            "padding": "5px 5px",
+            "fontSize": "10px",
             "backgroundColor": "white",
-            "borderBottom": "1px solid #f1f5f9",
+            "color": "#2f3d35",
+            "borderBottom": "1px solid #eef4f0",
             "whiteSpace": "nowrap",
             "overflow": "hidden",
             "textOverflow": "ellipsis",
-            "minWidth": "80px",
-            "width": "80px",
-            "maxWidth": "80px",
+            "minWidth": "72px",
+            "width": "72px",
+            "maxWidth": "72px",
         },
         style_cell_conditional=[
-            {"if": {"column_id": "liked"}, "width": "42px", "minWidth": "42px", "maxWidth": "42px"},
-            {"if": {"column_id": "track_name"}, "width": "180px", "minWidth": "180px", "maxWidth": "180px"},
-            {"if": {"column_id": "artists"}, "width": "220px", "minWidth": "220px", "maxWidth": "220px"},
-            {"if": {"column_id": "track_genre"}, "width": "130px", "minWidth": "130px", "maxWidth": "130px"},
-            {"if": {"column_id": "popularity"}, "width": "110px", "minWidth": "110px", "maxWidth": "110px"},
-            {"if": {"column_id": "energy"}, "width": "85px", "minWidth": "85px", "maxWidth": "85px"},
-            {"if": {"column_id": "valence"}, "width": "85px", "minWidth": "85px", "maxWidth": "85px"},
-            {"if": {"column_id": "danceability"}, "width": "100px", "minWidth": "100px", "maxWidth": "100px"},
+            {"if": {"column_id": "liked"}, "width": "36px", "minWidth": "36px", "maxWidth": "36px"},
+            {"if": {"column_id": "track_name"}, "width": "160px", "minWidth": "160px", "maxWidth": "160px"},
+            {"if": {"column_id": "artists"}, "width": "190px", "minWidth": "190px", "maxWidth": "190px"},
+            {"if": {"column_id": "track_genre"}, "width": "112px", "minWidth": "112px", "maxWidth": "112px"},
+            {"if": {"column_id": "popularity"}, "width": "95px", "minWidth": "95px", "maxWidth": "95px"},
+            {"if": {"column_id": "energy"}, "width": "76px", "minWidth": "76px", "maxWidth": "76px"},
+            {"if": {"column_id": "valence"}, "width": "76px", "minWidth": "76px", "maxWidth": "76px"},
+            {"if": {"column_id": "danceability"}, "width": "88px", "minWidth": "88px", "maxWidth": "88px"},
         ],
         style_data_conditional=style_conditional,
         css=[
-            {"selector": ".dash-spreadsheet-menu", "rule": "display:flex; justify-content:center;"},
+            {"selector": ".dash-spreadsheet-menu", "rule": "display:none !important;"},
             {"selector": ".previous-next-container", "rule": "float:none; margin: 0 auto;"},
+            {"selector": ".dash-spreadsheet-container tr:hover td", "rule": "background-color: #f4fbf7 !important;"},
+            {"selector": ".dash-table-tooltip", "rule": "background: rgba(20,44,32,0.92) !important; color: #ecf8f0 !important; border: 1px solid #2f6a4c !important; border-radius: 8px !important; font-size: 11px !important;"},
+            {"selector": ".dash-tooltip:before, .dash-tooltip:after", "rule": "border-bottom-color: rgba(20,44,32,0.92) !important;"},
         ],
         tooltip_data=[
             {k: {"value": str(v), "type": "markdown"} for k, v in row.items()} for row in data
