@@ -1,8 +1,6 @@
 import altair as alt
 import pandas as pd
 
-CARD_BG = "#f8fdf9"
-
 PROFILE_FEATURES = [
     "danceability", "energy", "valence",
     "acousticness", "speechiness", "liveness", "instrumentalness",
@@ -79,9 +77,8 @@ def make_audio_profile(df: pd.DataFrame, *, width: int = 240, height: int = 260)
             height=height,
             padding={"top": 8, "right": 8, "bottom": 36, "left": 8},
         )
-        .configure(background=CARD_BG)
         .configure(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
-        .configure_view(stroke=None, fill=CARD_BG)
+        .configure_view(stroke=None)
         .configure_axis(labelFontSize=11, titleFontSize=11)
         .configure_title(fontSize=13, fontWeight=600, anchor="start")
     )

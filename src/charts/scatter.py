@@ -1,8 +1,6 @@
 import altair as alt
 import pandas as pd
 
-CARD_BG = "#f8fdf9"
-
 BRIGHT_PALETTE = [
     "#1DB954", "#FF7A00", "#4C7DFF", "#E71D36",
     "#9B5DE5", "#00BBF9", "#F15BB5", "#FFD166",
@@ -142,8 +140,7 @@ def make_scatter(
         chart.configure(
             autosize=alt.AutoSizeParams(type=autosize_type, contains="padding")
         )
-        .configure(background=CARD_BG)
-        .configure_view(stroke=None, fill=CARD_BG)
+        .configure_view(stroke=None)
     )
 
     meta = {
