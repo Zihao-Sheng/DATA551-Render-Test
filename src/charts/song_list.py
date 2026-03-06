@@ -88,8 +88,9 @@ def make_song_list_table(
     # Visual polish to match dashboard cards
     style_conditional = [
         {"if": {"row_index": "odd"}, "backgroundColor": "#fbfcfd"},
-        {"if": {"state": "active"}, "backgroundColor": "#eef8f1", "border": "1px solid #b9e3c6"},
-        {"if": {"state": "selected"}, "backgroundColor": "#e6f5eb", "border": "1px solid #8fd3a7"},
+        # Keep active-cell cue subtle; row-level feedback is handled via selected cells.
+        {"if": {"state": "active"}, "backgroundColor": "#f3f7f5", "border": "1px solid #cddbd3"},
+        {"if": {"state": "selected"}, "backgroundColor": "#dff3e7", "border": "1px solid #69b88a"},
         {"if": {"column_id": "liked"}, "textAlign": "center", "fontSize": "16px", "padding": "0"},
         {"if": {"filter_query": "{liked} = '★'"}, "column_id": "liked", "color": "#f4b400"},
         {"if": {"column_id": "track_name"}, "fontWeight": "600", "color": "#1f2937"},

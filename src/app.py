@@ -6,11 +6,12 @@ from dash import Dash, html, dcc, Input, Output, State, callback, ctx, no_update
 import pandas as pd
 import numpy as np
 import dash_vega_components as dvc
+import plotly.graph_objects as go
 
 import altair as alt
 alt.data_transformers.disable_max_rows()
 
-from charts.scatter import make_scatter
+from charts.scatter import make_scatter, BRIGHT_PALETTE
 from charts.genre_bar import make_genre_bar
 from charts.distribution import make_distribution
 from charts.profile import make_audio_profile
@@ -22,13 +23,6 @@ DATA_PATH = ROOT / "data" / "raw" / "dataset.csv"
 data = pd.read_csv(DATA_PATH)
 data["_track_name_lc"] = data["track_name"].astype(str).str.lower()
 data["_artists_lc"] = data["artists"].astype(str).str.lower()
-TRACK_LOOKUP = (
-    data[["track_id", "track_name", "artists", "track_genre", "popularity"]]
-    .dropna(subset=["track_id"])
-    .drop_duplicates("track_id")
-    .assign(track_id=lambda d: d["track_id"].astype(str))
-    .set_index("track_id")
-)
 
 AUDIO_FEATURES = [
     "danceability", "energy", "valence",
@@ -108,6 +102,92 @@ BADGE = {
     "fontWeight": "600",
     "marginRight": "6px",
 }
+PROFILE_AXES = ["energy", "valence", "danceability", "acousticness", "speechiness", "liveness"]
+
+
+def _extract_track_id_from_scatter_signal(signal_data):
+    """
+    Best-effort parser for Vega selection signal payloads.
+    Handles nested dict/list structures produced by point selections.
+    """
+    if not signal_data:
+        return None
+
+    point_payload = signal_data.get("track_pick")
+    if point_payload is None:
+        return None
+
+    def _norm(v):
+        if isinstance(v, (list, tuple)):
+            if not v:
+                return None
+            v = v[0]
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s if s else None
+
+    def _from_fields_values(fields, values):
+        if not isinstance(fields, list):
+            return None
+        if not isinstance(values, list):
+            return None
+        for idx, f in enumerate(fields):
+            if isinstance(f, dict) and f.get("field") == "track_id" and idx < len(values):
+                return _norm(values[idx])
+        return None
+
+    def _walk(node):
+        if isinstance(node, dict):
+            if "track_id" in node and node["track_id"] is not None:
+                return _norm(node["track_id"])
+
+            fv = _from_fields_values(node.get("fields"), node.get("values"))
+            if fv:
+                return fv
+
+            for k in ("vlPoint", "vlMulti", "vlSingle"):
+                if k in node:
+                    found = _walk(node[k])
+                    if found:
+                        return found
+
+            for value in node.values():
+                found = _walk(value)
+                if found:
+                    return found
+        elif isinstance(node, list):
+            for item in node:
+                found = _walk(item)
+                if found:
+                    return found
+        return None
+
+    return _walk(point_payload)
+
+
+def _get_track_row(track_id: str):
+    if not track_id:
+        return None
+    rows = data[data["track_id"].astype(str) == str(track_id)]
+    if rows.empty:
+        return None
+    row = rows.iloc[0].copy()
+    for c in ["popularity", "tempo", *PROFILE_AXES]:
+        if c in row.index:
+            row[c] = pd.to_numeric(row[c], errors="coerce")
+    return row
+
+
+def _get_scatter_genre_color(track_genre: str, filtered_df: pd.DataFrame, *, max_points: int = 500, topk_genres: int = 10):
+    if filtered_df is None or len(filtered_df) == 0:
+        return "#cccccc"
+    plot_df = filtered_df.sample(n=max_points, random_state=42) if len(filtered_df) > max_points else filtered_df
+    top = plot_df["track_genre"].value_counts().head(topk_genres).index.tolist()
+    legend_order = top + ["Other"]
+    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#cccccc"]
+    color_map = {g: c for g, c in zip(legend_order, palette)}
+    return color_map.get(track_genre, color_map["Other"])
 
 
 def _compute_filtered_df(
@@ -320,7 +400,7 @@ app.layout = html.Div(
                                     id="scatter",
                                     spec={},
                                     opt={"renderer": "svg", "actions": False},
-                                    signalsToObserve=["brush_selection"],
+                                    signalsToObserve=["brush_selection", "track_pick"],
                                     style={"width": "100%"},
                                 ),
                             ],
@@ -391,17 +471,13 @@ app.layout = html.Div(
                         html.Div(
                             style=CARD,
                             children=[
-                                html.H4("Compare Mode", style=SECTION_TITLE),
+                                html.H4("Track Profile", style=SECTION_TITLE),
                                 html.Div(
-                                    "Placeholder panel for side-by-side group comparison.",
-                                    style={"fontSize": "12px", "color": "#888", "lineHeight": "1.6"},
+                                    "Click a song from scatter / similar list / table to view its profile.",
+                                    style={"fontSize": "11px", "color": "#888", "marginBottom": "10px", "lineHeight": "1.5"},
                                 ),
-                            ],
-                        ),
-
-                        html.Div(
-                            style=CARD,
-                            children=[
+                                html.Div(id="song-profile-container"),
+                                html.Hr(style={"border": "none", "borderTop": "1px solid #edf1f4", "margin": "14px 0"}),
                                 html.H4("Discover Similar Tracks", style=SECTION_TITLE),
                                 html.Div(
                                     "Pick a popular track from your selection — we'll find "
@@ -431,9 +507,10 @@ app.layout = html.Div(
                             "Click the star before Title to like/unlike a track.",
                             style={"fontSize": "11px", "color": "#888", "marginBottom": "8px"},
                         ),
-                        html.Div(id="song-list-container"),
-                        html.H4("Liked Songs", style={**SECTION_TITLE, "marginTop": "14px", "marginBottom": "8px"}),
-                        html.Div(id="liked-songs-container"),
+                        html.Div(
+                            id="song-list-container",
+                            children=make_song_list_table(data.head(0), max_rows=0, liked_track_ids=[]),
+                        ),
                     ],
                 ),
             ],
@@ -442,6 +519,7 @@ app.layout = html.Div(
         dcc.Store(id="brush-bounds-store"),
         dcc.Store(id="selected-genres-store", data=[]),
         dcc.Store(id="liked-tracks-store", data=[], storage_type="local"),
+        dcc.Store(id="selected-track-store", data=None),
     ],
 )
 
@@ -536,8 +614,20 @@ def render_selected_genres_box(selected_genres):
     Input("popularity-range", "value"),
     Input("liked-tracks-store", "data"),
     Input("scatter", "signalData"),
+    State("brush-bounds-store", "data"),
 )
-def update_scatter_and_stores(mode, keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, liked_tracks, signal_data):
+def update_scatter_and_stores(
+    mode,
+    keyword,
+    genre_values,
+    explicit_mode,
+    liked_filter_values,
+    tempo_bounds,
+    pop_bounds,
+    liked_tracks,
+    signal_data,
+    previous_bounds,
+):
     filtered_df = _compute_filtered_df(
         keyword,
         genre_values,
@@ -555,6 +645,9 @@ def update_scatter_and_stores(mode, keyword, genre_values, explicit_mode, liked_
         e0, e1 = brush["energy"]
         v0, v1 = brush["valence"]
         bounds = {"energy": [e0, e1], "valence": [v0, v1]}
+        selected_df = _compute_selected_df(filtered_df, bounds)
+    elif triggered == "scatter" and previous_bounds:
+        bounds = previous_bounds
         selected_df = _compute_selected_df(filtered_df, bounds)
     else:
         bounds = None
@@ -592,6 +685,7 @@ def update_scatter_and_stores(mode, keyword, genre_values, explicit_mode, liked_
             max_points=500,
             topk_genres=10,
             selection_name="brush_selection",
+            point_selection_name="track_pick",
             width="container",
             height=400,
         )
@@ -714,17 +808,21 @@ def update_song_list(keyword, genre_values, explicit_mode, liked_filter_values, 
     Output("liked-tracks-store", "data"),
     Input("song-table", "active_cell"),
     Input({"type": "similar-like", "track_id": ALL}, "n_clicks"),
+    Input({"type": "profile-like", "track_id": ALL}, "n_clicks"),
     State("song-table", "derived_viewport_data"),
     State("song-table", "data"),
     State("liked-tracks-store", "data"),
     prevent_initial_call=True,
 )
-def toggle_liked_tracks(active_cell, _similar_like_clicks, viewport_data, table_data, liked_tracks):
+def toggle_liked_tracks(active_cell, _similar_like_clicks, _profile_like_clicks, viewport_data, table_data, liked_tracks):
     liked = [str(x) for x in (liked_tracks or [])]
     triggered = ctx.triggered_id
 
     track_id = None
-    if isinstance(triggered, dict) and triggered.get("type") == "similar-like":
+    if isinstance(triggered, dict) and triggered.get("type") in {"similar-like", "profile-like"}:
+        triggered_value = (ctx.triggered[0] or {}).get("value") if ctx.triggered else None
+        if triggered_value in (None, 0):
+            return no_update
         track_id = str(triggered.get("track_id", "")).strip()
     elif triggered == "song-table":
         if not active_cell or active_cell.get("column_id") != "liked":
@@ -746,39 +844,215 @@ def toggle_liked_tracks(active_cell, _similar_like_clicks, viewport_data, table_
 
 
 @callback(
-    Output("liked-songs-container", "children"),
-    Input("liked-tracks-store", "data"),
+    Output("selected-track-store", "data"),
+    Input("scatter", "signalData"),
+    Input("song-table", "active_cell"),
+    Input({"type": "similar-open", "track_id": ALL}, "n_clicks"),
+    State("song-table", "derived_viewport_data"),
+    State("song-table", "data"),
+    State("selected-track-store", "data"),
+    prevent_initial_call=True,
 )
-def render_liked_songs(liked_tracks):
-    liked = [str(x) for x in (liked_tracks or [])]
-    if not liked:
-        return html.Div("No liked songs yet.", style={"fontSize": "12px", "color": "#9aa1ab"})
+def update_selected_track(signal_data, active_cell, _similar_open_clicks, viewport_data, table_data, current_selected):
+    triggered = ctx.triggered_id
+    track_id = None
+    source = None
 
-    rows = []
-    for tid in liked:
-        if tid not in TRACK_LOOKUP.index:
-            continue
-        row = TRACK_LOOKUP.loc[tid]
-        rows.append(
-            html.Div(
-                style={"padding": "8px 10px", "borderBottom": "1px solid #f0f2f5"},
-                children=[
-                    html.Div(f"★ {row['track_name']}", style={"fontSize": "12px", "fontWeight": "600", "color": "#1a1a2e"}),
-                    html.Div(
-                        f"{row['artists']}  ·  {row['track_genre']}  ·  Pop {int(row['popularity'])}",
-                        style={"fontSize": "11px", "color": "#888"},
-                    ),
-                ],
+    if isinstance(triggered, dict) and triggered.get("type") == "similar-open":
+        triggered_value = (ctx.triggered[0] or {}).get("value") if ctx.triggered else None
+        if triggered_value in (None, 0):
+            return no_update
+        track_id = str(triggered.get("track_id", "")).strip()
+        source = "similar-card"
+    elif triggered == "song-table":
+        if active_cell:
+            row_idx = active_cell.get("row")
+            visible_rows = viewport_data or table_data or []
+            if row_idx is not None and 0 <= row_idx < len(visible_rows):
+                track_id = str(visible_rows[row_idx].get("track_id", "")).strip()
+                source = "song-table"
+    elif triggered == "scatter":
+        track_id = _extract_track_id_from_scatter_signal(signal_data)
+        source = "scatter"
+
+    if not track_id:
+        return no_update
+    if current_selected and str(current_selected.get("track_id")) == track_id:
+        return no_update
+    return {"track_id": track_id, "source": source}
+
+
+@callback(
+    Output("song-profile-container", "children"),
+    Input("selected-track-store", "data"),
+    Input("liked-tracks-store", "data"),
+    Input("keyword", "value"),
+    Input("selected-genres-store", "data"),
+    Input("explicit", "value"),
+    Input("liked-only", "value"),
+    Input("tempo-range", "value"),
+    Input("popularity-range", "value"),
+)
+def render_song_profile(
+    selected_track,
+    liked_tracks,
+    keyword,
+    genre_values,
+    explicit_mode,
+    liked_filter_values,
+    tempo_bounds,
+    pop_bounds,
+):
+    track_id = str((selected_track or {}).get("track_id", "")).strip()
+    if not track_id:
+        return html.Div("No song selected yet.", style={"fontSize": "12px", "color": "#9aa1ab"})
+
+    row = _get_track_row(track_id)
+    if row is None:
+        return html.Div("Track not found in dataset.", style={"fontSize": "12px", "color": "#c00"})
+
+    liked_set = {str(x) for x in (liked_tracks or [])}
+    is_liked = track_id in liked_set
+    filtered_df = _compute_filtered_df(
+        keyword,
+        genre_values,
+        explicit_mode,
+        tempo_bounds,
+        pop_bounds,
+        liked_filter_values,
+        liked_tracks,
+    )
+    genre_color = _get_scatter_genre_color(str(row.get("track_genre", "")), filtered_df)
+
+    theta = ["Energy", "Valence", "Dance", "Acoustic", "Speech", "Live"]
+    values = [float(row.get(c, 0) if pd.notna(row.get(c, np.nan)) else 0.0) for c in PROFILE_AXES]
+    fig = go.Figure(
+        data=[
+            go.Scatterpolar(
+                r=values + [values[0]],
+                theta=theta + [theta[0]],
+                fill="toself",
+                line=dict(color=genre_color, width=2),
+                fillcolor=genre_color,
+                opacity=0.35,
+                hovertemplate="%{theta}: %{r:.2f}<extra></extra>",
             )
-        )
+        ]
+    )
+    fig.update_layout(
+        margin=dict(l=8, r=8, t=0, b=0),
+        showlegend=False,
+        paper_bgcolor="white",
+        polar=dict(
+            bgcolor="white",
+            radialaxis=dict(visible=True, range=[0, 1], tickfont=dict(size=8), gridcolor="#e6ebf2"),
+            angularaxis=dict(tickfont=dict(size=9)),
+        ),
+    )
 
-    if not rows:
-        return html.Div("No liked songs yet.", style={"fontSize": "12px", "color": "#9aa1ab"})
+    pop = int(row["popularity"]) if pd.notna(row.get("popularity", np.nan)) else 0
+    tempo = int(row["tempo"]) if pd.notna(row.get("tempo", np.nan)) else 0
+    explicit_text = "Explicit" if bool(row.get("explicit", False)) else "Clean"
 
     return html.Div(
-        rows,
-        style={"border": "1px solid #e9edf2", "borderRadius": "10px", "overflow": "hidden"},
+        [
+            html.Div(
+                style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start", "gap": "10px"},
+                children=[
+                    html.Div(
+                        [
+                            html.Div(str(row.get("track_name", "Unknown")), style={"fontSize": "16px", "fontWeight": "700", "color": "#1a1a2e"}),
+                            html.Div(
+                                f"{row.get('artists', 'Unknown')}  ·  {row.get('track_genre', 'Unknown')}",
+                                style={"fontSize": "12px", "color": "#6b7280", "marginTop": "2px"},
+                            ),
+                        ],
+                        style={"minWidth": 0},
+                    ),
+                    html.Button(
+                        "★" if is_liked else "☆",
+                        id={"type": "profile-like", "track_id": track_id},
+                        n_clicks=0,
+                        title="Like this track",
+                        style={
+                            "border": "none",
+                            "background": "transparent",
+                            "cursor": "pointer",
+                            "fontSize": "22px",
+                            "lineHeight": "1",
+                            "padding": 0,
+                            "color": "#f4b400" if is_liked else "#bcc3cc",
+                        },
+                    ),
+                ],
+            ),
+            dcc.Graph(
+                figure=fig,
+                config={"displayModeBar": False, "staticPlot": True},
+                style={"height": "190px", "marginBottom": "10px"},
+            ),
+            html.Div(
+                [
+                    html.Span(f"Pop {pop}", style={**BADGE, "backgroundColor": "#e8f5e9", "color": "#2d6a4f", "fontSize": "10px"}),
+                    html.Span(f"Tempo {tempo}", style={**BADGE, "backgroundColor": "#e7f0ff", "color": "#1d4ed8", "fontSize": "10px"}),
+                    html.Span(explicit_text, style={**BADGE, "backgroundColor": "#fff4e6", "color": "#9a3412", "fontSize": "10px"}),
+                ],
+                style={"display": "flex", "alignItems": "center", "gap": "6px", "flexWrap": "wrap"},
+            ),
+            html.Button(
+                "Show Similar Tracks",
+                id="profile-show-similar-btn",
+                n_clicks=0,
+                style={
+                    "marginTop": "10px",
+                    "width": "100%",
+                    "border": "1px solid #dbe5df",
+                    "backgroundColor": "#f6fbf8",
+                    "color": "#2d6a4f",
+                    "fontSize": "12px",
+                    "fontWeight": "600",
+                    "padding": "8px 10px",
+                    "borderRadius": "8px",
+                    "cursor": "pointer",
+                },
+            ),
+        ]
     )
+
+
+@callback(
+    Output("similar-track-dropdown", "value", allow_duplicate=True),
+    Input("profile-show-similar-btn", "n_clicks"),
+    State("selected-track-store", "data"),
+    prevent_initial_call=True,
+)
+def push_profile_track_to_similar(_clicks, selected_track):
+    track_id = str((selected_track or {}).get("track_id", "")).strip()
+    source = str((selected_track or {}).get("source", "")).strip()
+    if source == "song-table":
+        return no_update
+    if not track_id:
+        return no_update
+    return track_id
+
+
+@callback(
+    Output("song-table", "selected_cells"),
+    Input("song-table", "active_cell"),
+    State("song-table", "columns"),
+    prevent_initial_call=True,
+)
+def highlight_song_table_row(active_cell, columns):
+    if not active_cell:
+        return no_update
+    row = active_cell.get("row")
+    if row is None:
+        return no_update
+    visible_cols = [col for col in (columns or []) if col.get("id") != "track_id"]
+    return [
+        {"row": row, "column": idx, "column_id": col["id"]}
+        for idx, col in enumerate(visible_cols)
+    ]
 
 
 @callback(
@@ -806,16 +1080,18 @@ def update_similar_dropdown(keyword, genre_values, explicit_mode, liked_filter_v
         liked_tracks,
     )
     selected_df = _compute_selected_df(filtered_df, bounds)
+    current_value_str = str(current_value) if current_value is not None else None
     if selected_df is None or len(selected_df) == 0:
-        return [], None
+        return [], current_value_str
 
     df = selected_df
     needed = ["track_id", "track_name", "artists", "popularity"]
     missing = [c for c in needed if c not in df.columns]
     if missing:
-        return [], None
+        return [], current_value_str
 
     base = df[needed].drop_duplicates("track_id")
+    base["track_id"] = base["track_id"].astype(str)
     base["popularity"] = pd.to_numeric(base["popularity"], errors="coerce").fillna(0)
 
     # Default: show top-30 popular tracks.
@@ -830,6 +1106,12 @@ def update_similar_dropdown(keyword, genre_values, explicit_mode, liked_filter_v
     else:
         options_df = base.nlargest(30, "popularity")
 
+    # Keep currently selected value in dropdown options, even if not in top-30.
+    if current_value_str is not None and (options_df["track_id"] == current_value_str).sum() == 0:
+        keep = base[base["track_id"] == current_value_str]
+        if not keep.empty:
+            options_df = pd.concat([options_df, keep]).drop_duplicates("track_id", keep="first")
+
     options = [
         {
             "label": f"{row.track_name}  —  {row.artists}  (pop {int(row.popularity)})",
@@ -837,22 +1119,23 @@ def update_similar_dropdown(keyword, genre_values, explicit_mode, liked_filter_v
         }
         for row in options_df.itertuples()
     ]
-    option_values = {opt["value"] for opt in options}
-    next_value = current_value if current_value in option_values else None
+    # Keep dropdown value stable; similar list should only refresh when user
+    # explicitly changes dropdown (or button sets it).
+    next_value = current_value_str
     return options, next_value
 
 
 @callback(
     Output("similar-tracks-container", "children"),
     Input("similar-track-dropdown", "value"),
-    Input("keyword", "value"),
-    Input("selected-genres-store", "data"),
-    Input("explicit", "value"),
-    Input("liked-only", "value"),
-    Input("tempo-range", "value"),
-    Input("popularity-range", "value"),
-    Input("brush-bounds-store", "data"),
-    Input("liked-tracks-store", "data"),
+    State("keyword", "value"),
+    State("selected-genres-store", "data"),
+    State("explicit", "value"),
+    State("liked-only", "value"),
+    State("tempo-range", "value"),
+    State("popularity-range", "value"),
+    State("brush-bounds-store", "data"),
+    State("liked-tracks-store", "data"),
 )
 def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
     if not track_id:
@@ -877,21 +1160,23 @@ def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, liked_
     if missing:
         return html.Div("Selected data missing required columns.", style={"fontSize": "12px", "color": "#c00"})
 
-    matches = pool[pool["track_id"] == track_id]
+    track_id_str = str(track_id)
+    matches = pool[pool["track_id"].astype(str) == track_id_str]
     if matches.empty:
         # Fallback for edge cases where selected set changed after choosing a track
-        matches = data[data["track_id"] == track_id]
+        matches = data[data["track_id"].astype(str) == track_id_str]
     if matches.empty:
         return html.Div("Track not found.", style={"fontSize": "12px", "color": "#c00"})
 
     ref = matches.iloc[0]
 
     work = pool[required].copy()
+    work["track_id"] = work["track_id"].astype(str)
     for c in ["popularity", *AUDIO_FEATURES]:
         work[c] = pd.to_numeric(work[c], errors="coerce")
     work = work.dropna(subset=["track_id", "popularity", *AUDIO_FEATURES]).drop_duplicates("track_id")
 
-    ref_rows = work[work["track_id"] == track_id]
+    ref_rows = work[work["track_id"] == track_id_str]
     if ref_rows.empty:
         return html.Div("Reference track is not in current selection.", style={"fontSize": "12px", "color": "#c00"})
 
@@ -904,7 +1189,7 @@ def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, liked_
     candidates["_dist"] = dists
     candidates = (
         candidates[
-            (candidates["track_id"] != track_id) &
+            (candidates["track_id"] != track_id_str) &
             (candidates["popularity"] < ref_pop)
         ]
         .nsmallest(10, "_dist")
@@ -934,8 +1219,10 @@ def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, liked_
                     html.Div(
                         style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "10px"},
                         children=[
-                            html.Div(
+                            html.Button(
                                 row["track_name"],
+                                id={"type": "similar-open", "track_id": cand_id},
+                                n_clicks=0,
                                 style={
                                     "fontWeight": "600",
                                     "color": "#1a1a2e",
@@ -943,6 +1230,11 @@ def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, liked_
                                     "textOverflow": "ellipsis",
                                     "whiteSpace": "nowrap",
                                     "flex": "1",
+                                    "textAlign": "left",
+                                    "background": "transparent",
+                                    "border": "none",
+                                    "padding": 0,
+                                    "cursor": "pointer",
                                 },
                             ),
                             html.Button(

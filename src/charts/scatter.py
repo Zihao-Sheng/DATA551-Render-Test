@@ -15,6 +15,7 @@ def make_scatter(
     max_points: int = 2000,
     topk_genres: int = 10,
     selection_name: str = "brush_selection",
+    point_selection_name: str = "track_pick",
     width: int = 520,
     height: int = 380,
 ):
@@ -89,23 +90,33 @@ def make_scatter(
         scale=alt.Scale(range=[20, 200]),
         legend=alt.Legend(orient="right", titleFontSize=10, labelFontSize=10),
     )
+    point_pick = alt.selection_point(
+        name=point_selection_name,
+        fields=["track_id"],
+        on="click",
+        clear="dblclick",
+        empty=False,
+    )
 
     if mode == "brush":
-        brush = alt.selection_interval(name=selection_name)
+        brush = alt.selection_interval(name=selection_name, empty=True)
 
         chart = (
-            base.mark_point()
+            base.mark_point(filled=True)
             .encode(
-                opacity=alt.condition(brush, alt.value(0.85), alt.value(0.07)),
+                opacity=alt.condition(brush, alt.value(0.85), alt.value(0.30)),
                 size=size_enc,
             )
-            .add_params(brush)
+            .add_params(brush, point_pick)
         )
 
     else:
         chart = (
-            base.mark_point(opacity=0.75)
-            .encode(size=size_enc)
+            base.mark_point(opacity=0.75, filled=True)
+            .encode(
+                size=size_enc,
+            )
+            .add_params(point_pick)
             .interactive()
         )
 
