@@ -60,6 +60,7 @@ def make_scatter(
     base = (
         alt.Chart(plot_df)
         .encode(
+            detail=alt.Detail("track_id:N"),
             x=alt.X(
                 "energy:Q",
                 title="Energy",
