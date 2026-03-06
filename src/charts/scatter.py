@@ -33,14 +33,29 @@ def make_scatter(
 
     n_total = len(df)
     sampled = n_total > max_points
-    plot_df = df.sample(n=max_points, random_state=42) if sampled else df.copy()
+    if sampled:
+        # Stable downsampling: pick a deterministic subset by track_id hash
+        # so points don't "jump" between callback updates.
+        if "track_id" in df.columns:
+            work = df.copy()
+            hash_series = pd.util.hash_pandas_object(work["track_id"].astype(str), index=False)
+            plot_df = (
+                work.assign(_stable_hash=hash_series.values)
+                .sort_values("_stable_hash", kind="mergesort")
+                .head(max_points)
+                .drop(columns=["_stable_hash"])
+            )
+        else:
+            plot_df = df.sample(n=max_points, random_state=42)
+    else:
+        plot_df = df.copy()
 
     top = plot_df["track_genre"].value_counts().head(topk_genres).index
     plot_df = plot_df.assign(
         genre_group=plot_df["track_genre"].where(plot_df["track_genre"].isin(top), "Other")
     )
     legend_order = list(top) + ["Other"]
-    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#cccccc"]
+    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#e6e6e6"]
 
     base = (
         alt.Chart(plot_df)

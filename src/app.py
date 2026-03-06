@@ -54,6 +54,7 @@ server = app.server
 
 GREEN = "#1DB954"
 DARK_GREEN = "#168d3e"
+TITLE_GREEN = "#169c46"
 PAGE = {
     "fontFamily": "'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial",
     "backgroundColor": "#f0f2f5",
@@ -63,44 +64,44 @@ PAGE = {
 }
 CARD = {
     "backgroundColor": "white",
-    "borderRadius": "16px",
-    "padding": "18px",
+    "borderRadius": "12px",
+    "padding": "12px",
     "boxShadow": "0 1px 6px rgba(0,0,0,0.07)",
-    "marginBottom": "14px",
+    "marginBottom": "10px",
 }
 SECTION_TITLE = {
-    "fontSize": "14px",
+    "fontSize": "12px",
     "fontWeight": "700",
-    "color": "#1a1a2e",
+    "color": TITLE_GREEN,
     "marginTop": 0,
-    "marginBottom": "12px",
+    "marginBottom": "8px",
     "letterSpacing": "-0.2px",
 }
 FILTER_LABEL = {
-    "fontSize": "11px",
+    "fontSize": "9px",
     "fontWeight": "600",
     "color": "#888",
     "textTransform": "uppercase",
     "letterSpacing": "0.7px",
-    "marginTop": "14px",
-    "marginBottom": "6px",
+    "marginTop": "10px",
+    "marginBottom": "4px",
 }
 INPUT_STYLE = {
     "width": "100%",
-    "padding": "9px 12px",
-    "borderRadius": "10px",
+    "padding": "6px 9px",
+    "borderRadius": "8px",
     "border": "1px solid #e2e5ea",
     "outline": "none",
-    "fontSize": "13px",
+    "fontSize": "11px",
     "boxSizing": "border-box",
 }
 BADGE = {
     "display": "inline-block",
-    "padding": "3px 10px",
-    "borderRadius": "20px",
-    "fontSize": "12px",
+    "padding": "2px 7px",
+    "borderRadius": "16px",
+    "fontSize": "10px",
     "fontWeight": "600",
-    "marginRight": "6px",
+    "marginRight": "4px",
 }
 PROFILE_AXES = ["energy", "valence", "danceability", "acousticness", "speechiness", "liveness"]
 
@@ -182,7 +183,23 @@ def _get_track_row(track_id: str):
 def _get_scatter_genre_color(track_genre: str, filtered_df: pd.DataFrame, *, max_points: int = 500, topk_genres: int = 10):
     if filtered_df is None or len(filtered_df) == 0:
         return "#cccccc"
-    plot_df = filtered_df.sample(n=max_points, random_state=42) if len(filtered_df) > max_points else filtered_df
+
+    # Match scatter sampling logic so profile color aligns with legend colors.
+    if len(filtered_df) > max_points:
+        if "track_id" in filtered_df.columns:
+            work = filtered_df.copy()
+            hash_series = pd.util.hash_pandas_object(work["track_id"].astype(str), index=False)
+            plot_df = (
+                work.assign(_stable_hash=hash_series.values)
+                .sort_values("_stable_hash", kind="mergesort")
+                .head(max_points)
+                .drop(columns=["_stable_hash"])
+            )
+        else:
+            plot_df = filtered_df.sample(n=max_points, random_state=42)
+    else:
+        plot_df = filtered_df
+
     top = plot_df["track_genre"].value_counts().head(topk_genres).index.tolist()
     legend_order = top + ["Other"]
     palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#cccccc"]
@@ -238,27 +255,39 @@ app.layout = html.Div(
             className="topbar",
             style={
                 "background": f"linear-gradient(135deg, #0d2016 0%, #1a3a22 100%)",
-                "padding": "18px 28px",
+                "padding": "12px 18px",
                 "marginBottom": "0",
             },
             children=html.Div(
                 className="topbar-inner",
-                style={"maxWidth": "1960px", "margin": "0 auto",
+                style={"maxWidth": "1300px", "margin": "0 auto",
                        "display": "flex", "justifyContent": "space-between", "alignItems": "center"},
                 children=[
                     html.Div([
                         html.Div(
                             [
-
-                                html.Span(
-                                    "Spotify Track Insights Explorer",
-                                    style={"fontSize": "20px", "fontWeight": "700", "color": "white", "letterSpacing": "-0.4px"},
+                                html.Div(
+                                    [
+                                        html.Span(
+                                            className="spotify-logo",
+                                            children=[
+                                                html.Span(className="spotify-wave spotify-wave-1"),
+                                                html.Span(className="spotify-wave spotify-wave-2"),
+                                                html.Span(className="spotify-wave spotify-wave-3"),
+                                            ],
+                                        ),
+                                        html.Span(
+                                            "Spotify Track Insights Explorer",
+                                            style={"fontSize": "16px", "fontWeight": "700", "color": "white", "letterSpacing": "-0.2px"},
+                                        ),
+                                    ],
+                                    style={"display": "flex", "alignItems": "center", "gap": "8px"},
                                 ),
                             ]
                         ),
                         html.Div(
                             "Explore audio features, genres, and popularity across 114k+ tracks",
-                            style={"fontSize": "12px", "color": "#8fba9a", "marginTop": "3px"},
+                            style={"fontSize": "10px", "color": "#8fba9a", "marginTop": "2px"},
                         ),
                     ]),
                     html.Div(
@@ -271,9 +300,10 @@ app.layout = html.Div(
         ),
 
         html.Div(
+            id="layout-grid",
             className="layout-grid",
             style={
-                "maxWidth": "1960px",
+                "maxWidth": "1300px",
                 "margin": "0 auto",
                 "display": "grid",
                 "alignItems": "start",
@@ -281,10 +311,11 @@ app.layout = html.Div(
             children=[
 
                 html.Div(
+                    id="left-panel",
                     className="left-panel",
                     style={**CARD, "marginBottom": 0},
                     children=[
-                        html.Div("Filters", style={**SECTION_TITLE, "color": GREEN}),
+                        html.Div("Filters", style={**SECTION_TITLE, "color": TITLE_GREEN}),
 
                         html.Div("Search Tracks", style=FILTER_LABEL),
                         dcc.Input(
@@ -303,13 +334,13 @@ app.layout = html.Div(
                             placeholder="Search & add a genre…",
                             clearable=True,
                             searchable=True,
-                            style={"fontSize": "12px"},
+                            style={"fontSize": "11px"},
                         ),
                         html.Div(
                             id="selected-genres-box",
                             style={
-                                "marginTop": "8px",
-                                "padding": "8px",
+                                "marginTop": "6px",
+                                "padding": "6px",
                                 "border": "1px solid #e2e5ea",
                                 "borderRadius": "10px",
                                 "backgroundColor": "#fbfcfd",
@@ -327,7 +358,7 @@ app.layout = html.Div(
                             ],
                             value="all",
                             style={"rowGap": "5px", "display": "grid"},
-                            labelStyle={"display": "flex", "alignItems": "center", "gap": "8px", "fontSize": "13px"},
+                            labelStyle={"display": "flex", "alignItems": "center", "gap": "7px", "fontSize": "12px"},
                             inputStyle={"accentColor": GREEN},
                         ),
 
@@ -337,7 +368,7 @@ app.layout = html.Div(
                             options=[{"label": " Liked only", "value": "liked"}],
                             value=[],
                             style={"rowGap": "5px", "display": "grid"},
-                            labelStyle={"display": "flex", "alignItems": "center", "gap": "8px", "fontSize": "13px"},
+                            labelStyle={"display": "flex", "alignItems": "center", "gap": "7px", "fontSize": "12px"},
                             inputStyle={"accentColor": GREEN},
                         ),
 
@@ -361,14 +392,15 @@ app.layout = html.Div(
 
                         html.Div(
                             id="filter-hint",
-                            style={"fontSize": "12px", "color": "#888", "marginTop": "16px",
-                                   "padding": "10px 12px", "backgroundColor": "#f8f9fa",
+                            style={"fontSize": "11px", "color": "#888", "marginTop": "12px",
+                                   "padding": "8px 10px", "backgroundColor": "#f8f9fa",
                                    "borderRadius": "10px", "lineHeight": "1.6"},
                         ),
                     ],
                 ),
 
                 html.Div(
+                    id="main-panel",
                     className="main-panel",
                     style={"minWidth": 0},
                     children=[
@@ -380,7 +412,7 @@ app.layout = html.Div(
                                     children=[
                                         html.Div([
                                             html.H4("Energy vs Valence", style=SECTION_TITLE),
-                                            html.Div(id="scatter-meta", style={"fontSize": "12px", "color": "#888", "marginBottom": "8px"}),
+                                            html.Div(id="scatter-meta", style={"fontSize": "10px", "color": "#888", "marginBottom": "5px"}),
                                         ]),
                                         dcc.RadioItems(
                                             id="toolbox-mode",
@@ -390,7 +422,7 @@ app.layout = html.Div(
                                             ],
                                             value="brush",
                                             inline=True,
-                                            style={"fontSize": "12px", "color": "#555"},
+                                            style={"fontSize": "10px", "color": "#555"},
                                             labelStyle={"marginLeft": "10px", "cursor": "pointer"},
                                             inputStyle={"accentColor": GREEN},
                                         ),
@@ -414,7 +446,7 @@ app.layout = html.Div(
                                     children=[
                                         html.H4("Top Genres by Popularity", style=SECTION_TITLE),
                                         html.Div(
-                                            style={"fontSize": "11px", "color": "#888", "marginBottom": "10px"},
+                                            style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
                                             children="Average popularity by genre, colored by mean energy.",
                                         ),
                                         dvc.Vega(
@@ -430,7 +462,7 @@ app.layout = html.Div(
                                     children=[
                                         html.H4("Avg Audio Profile", style=SECTION_TITLE),
                                         html.Div(
-                                            style={"fontSize": "11px", "color": "#888", "marginBottom": "10px"},
+                                            style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
                                             children="Mean values for selected / filtered tracks.",
                                         ),
                                         dvc.Vega(
@@ -449,7 +481,7 @@ app.layout = html.Div(
                             children=[
                                 html.H4("Feature Density — Selected Tracks", style=SECTION_TITLE),
                                 html.Div(
-                                    style={"fontSize": "11px", "color": "#888", "marginBottom": "10px"},
+                                    style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
                                     children="Distribution of key audio features for the current selection.",
                                 ),
                                 dvc.Vega(
@@ -465,24 +497,31 @@ app.layout = html.Div(
                 ),
 
                 html.Div(
+                    id="right-panel",
                     className="right-panel",
                     style={"minWidth": 0},
                     children=[
                         html.Div(
-                            style=CARD,
+                            id="track-profile-card",
+                            style={**CARD, "marginBottom": 0, "overflow": "visible"},
                             children=[
                                 html.H4("Track Profile", style=SECTION_TITLE),
                                 html.Div(
                                     "Click a song from scatter / similar list / table to view its profile.",
-                                    style={"fontSize": "11px", "color": "#888", "marginBottom": "10px", "lineHeight": "1.5"},
+                                    style={"fontSize": "9px", "color": "#888", "marginBottom": "7px", "lineHeight": "1.4"},
                                 ),
                                 html.Div(id="song-profile-container"),
-                                html.Hr(style={"border": "none", "borderTop": "1px solid #edf1f4", "margin": "14px 0"}),
+                            ],
+                        ),
+                        html.Div(
+                            id="similar-tracks-card",
+                            style={**CARD, "marginBottom": 0, "display": "flex", "flexDirection": "column", "minHeight": 0},
+                            children=[
                                 html.H4("Discover Similar Tracks", style=SECTION_TITLE),
                                 html.Div(
                                     "Pick a popular track from your selection — we'll find "
                                     "audio-similar but less-discovered songs.",
-                                    style={"fontSize": "11px", "color": "#888", "marginBottom": "10px", "lineHeight": "1.5"},
+                                    style={"fontSize": "9px", "color": "#888", "marginBottom": "7px", "lineHeight": "1.4"},
                                 ),
                                 dcc.Dropdown(
                                     id="similar-track-dropdown",
@@ -490,9 +529,9 @@ app.layout = html.Div(
                                     options=[],
                                     value=None,
                                     clearable=True,
-                                    style={"fontSize": "12px", "marginBottom": "12px"},
+                                    style={"fontSize": "10px", "marginBottom": "8px"},
                                 ),
-                                html.Div(id="similar-tracks-container"),
+                                html.Div(id="similar-tracks-container", style={"flex": "1 1 auto", "minHeight": 0, "overflowY": "auto", "overflowX": "hidden", "paddingRight": "2px"}),
                             ],
                         ),
                     ],
@@ -505,7 +544,7 @@ app.layout = html.Div(
                         html.H4("Track List", style=SECTION_TITLE),
                         html.Div(
                             "Click the star before Title to like/unlike a track.",
-                            style={"fontSize": "11px", "color": "#888", "marginBottom": "8px"},
+                            style={"fontSize": "9px", "color": "#888", "marginBottom": "5px"},
                         ),
                         html.Div(
                             id="song-list-container",
@@ -686,8 +725,8 @@ def update_scatter_and_stores(
             topk_genres=10,
             selection_name="brush_selection",
             point_selection_name="track_pick",
-            width="container",
-            height=400,
+            width=320,
+            height=320,
         )
         spec_out = chart.to_dict()
         bounds = None
@@ -718,7 +757,7 @@ def update_genre_bar(keyword, genre_values, explicit_mode, liked_filter_values, 
         liked_tracks,
     )
     df = _compute_selected_df(filtered_df, bounds)
-    chart = make_genre_bar(df, top_n=10, width="container", height=265)
+    chart = make_genre_bar(df, top_n=10, width="container", height=220)
     return chart.to_dict()
 
 
@@ -744,7 +783,7 @@ def update_distribution(keyword, genre_values, explicit_mode, liked_filter_value
         liked_tracks,
     )
     df = _compute_selected_df(filtered_df, bounds)
-    chart = make_distribution(df, max_points=2000, width=480, height=190)
+    chart = make_distribution(df, max_points=2000, width=360, height=160)
     return chart.to_dict()
 
 
@@ -770,7 +809,7 @@ def update_audio_profile(keyword, genre_values, explicit_mode, liked_filter_valu
         liked_tracks,
     )
     df = _compute_selected_df(filtered_df, bounds)
-    chart = make_audio_profile(df, width="container", height=290)
+    chart = make_audio_profile(df, width="container", height=235)
     return chart.to_dict()
 
 
@@ -940,13 +979,13 @@ def render_song_profile(
         ]
     )
     fig.update_layout(
-        margin=dict(l=8, r=8, t=0, b=0),
+        margin=dict(l=32, r=24, t=2, b=2),
         showlegend=False,
         paper_bgcolor="white",
         polar=dict(
             bgcolor="white",
-            radialaxis=dict(visible=True, range=[0, 1], tickfont=dict(size=8), gridcolor="#e6ebf2"),
-            angularaxis=dict(tickfont=dict(size=9)),
+            radialaxis=dict(visible=True, range=[0, 1], tickfont=dict(size=7), gridcolor="#e6ebf2"),
+            angularaxis=dict(tickfont=dict(size=7)),
         ),
     )
 
@@ -957,66 +996,92 @@ def render_song_profile(
     return html.Div(
         [
             html.Div(
-                style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start", "gap": "10px"},
+                style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start", "gap": "8px"},
                 children=[
                     html.Div(
                         [
-                            html.Div(str(row.get("track_name", "Unknown")), style={"fontSize": "16px", "fontWeight": "700", "color": "#1a1a2e"}),
+                            html.Div(str(row.get("track_name", "Unknown")), style={"fontSize": "15px", "fontWeight": "700", "color": "#1a1a2e"}),
                             html.Div(
                                 f"{row.get('artists', 'Unknown')}  ·  {row.get('track_genre', 'Unknown')}",
-                                style={"fontSize": "12px", "color": "#6b7280", "marginTop": "2px"},
+                                style={"fontSize": "11px", "color": "#6b7280", "marginTop": "1px"},
                             ),
                         ],
                         style={"minWidth": 0},
                     ),
-                    html.Button(
-                        "★" if is_liked else "☆",
-                        id={"type": "profile-like", "track_id": track_id},
-                        n_clicks=0,
-                        title="Like this track",
-                        style={
-                            "border": "none",
-                            "background": "transparent",
-                            "cursor": "pointer",
-                            "fontSize": "22px",
-                            "lineHeight": "1",
-                            "padding": 0,
-                            "color": "#f4b400" if is_liked else "#bcc3cc",
-                        },
+                    html.Div(
+                        [
+                            html.Button(
+                                "Show Similar Tracks",
+                                id="profile-show-similar-btn",
+                                n_clicks=0,
+                                style={
+                                    "width": "fit-content",
+                                    "minWidth": "0",
+                                    "border": "1px solid #dbe5df",
+                                    "backgroundColor": "#f6fbf8",
+                                    "color": "#2d6a4f",
+                                    "fontSize": "10px",
+                                    "fontWeight": "600",
+                                    "padding": "4px 7px",
+                                    "borderRadius": "8px",
+                                    "cursor": "pointer",
+                                    "whiteSpace": "nowrap",
+                                    "flex": "0 0 auto",
+                                },
+                            ),
+                            html.Button(
+                                "★" if is_liked else "☆",
+                                id={"type": "profile-like", "track_id": track_id},
+                                n_clicks=0,
+                                title="Like this track",
+                                style={
+                                    "border": "none",
+                                    "background": "transparent",
+                                    "cursor": "pointer",
+                                    "fontSize": "20px",
+                                    "lineHeight": "1",
+                                    "padding": 0,
+                                    "color": "#f4b400" if is_liked else "#bcc3cc",
+                                },
+                            ),
+                        ],
+                        style={"display": "flex", "alignItems": "center", "gap": "8px", "flex": "0 0 auto"},
                     ),
                 ],
             ),
-            dcc.Graph(
-                figure=fig,
-                config={"displayModeBar": False, "staticPlot": True},
-                style={"height": "190px", "marginBottom": "10px"},
-            ),
             html.Div(
                 [
-                    html.Span(f"Pop {pop}", style={**BADGE, "backgroundColor": "#e8f5e9", "color": "#2d6a4f", "fontSize": "10px"}),
-                    html.Span(f"Tempo {tempo}", style={**BADGE, "backgroundColor": "#e7f0ff", "color": "#1d4ed8", "fontSize": "10px"}),
-                    html.Span(explicit_text, style={**BADGE, "backgroundColor": "#fff4e6", "color": "#9a3412", "fontSize": "10px"}),
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.Span(f"Pop {pop}", style={**BADGE, "backgroundColor": "#e8f5e9", "color": "#2d6a4f", "fontSize": "10px"}),
+                                    html.Span(f"Tempo {tempo}", style={**BADGE, "backgroundColor": "#e7f0ff", "color": "#1d4ed8", "fontSize": "10px"}),
+                                    html.Span(explicit_text, style={**BADGE, "backgroundColor": "#fff4e6", "color": "#9a3412", "fontSize": "10px"}),
+                                ],
+                                style={"display": "flex", "flexDirection": "column", "alignItems": "flex-start", "gap": "5px", "minWidth": 0},
+                            ),
+                        ],
+                        style={
+                            "display": "flex",
+                            "flexDirection": "column",
+                            "alignItems": "flex-start",
+                            "justifyContent": "center",
+                            "gap": "5px",
+                            "minWidth": 0,
+                            "flex": "0 0 28%",
+                        },
+                    ),
+                    dcc.Graph(
+                        figure=fig,
+                        config={"displayModeBar": False, "staticPlot": True},
+                        style={"height": "148px", "width": "72%", "minWidth": "220px", "marginLeft": "-8px"},
+                    ),
                 ],
-                style={"display": "flex", "alignItems": "center", "gap": "6px", "flexWrap": "wrap"},
+                style={"display": "flex", "flexWrap": "nowrap", "alignItems": "center", "gap": "2px"},
             ),
-            html.Button(
-                "Show Similar Tracks",
-                id="profile-show-similar-btn",
-                n_clicks=0,
-                style={
-                    "marginTop": "10px",
-                    "width": "100%",
-                    "border": "1px solid #dbe5df",
-                    "backgroundColor": "#f6fbf8",
-                    "color": "#2d6a4f",
-                    "fontSize": "12px",
-                    "fontWeight": "600",
-                    "padding": "8px 10px",
-                    "borderRadius": "8px",
-                    "cursor": "pointer",
-                },
-            ),
-        ]
+        ],
+        style={"display": "grid", "rowGap": "4px"},
     )
 
 
@@ -1027,6 +1092,8 @@ def render_song_profile(
     prevent_initial_call=True,
 )
 def push_profile_track_to_similar(_clicks, selected_track):
+    if _clicks in (None, 0):
+        return no_update
     track_id = str((selected_track or {}).get("track_id", "")).strip()
     source = str((selected_track or {}).get("source", "")).strip()
     if source == "song-table":
