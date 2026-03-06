@@ -116,6 +116,11 @@ def _extract_track_id_from_scatter_signal(signal_data):
 
     point_payload = signal_data.get("track_pick")
     if point_payload is None:
+        for k, v in (signal_data or {}).items():
+            if isinstance(k, str) and "track_pick" in k:
+                point_payload = v
+                break
+    if point_payload is None:
         return None
 
     def _norm(v):
@@ -142,6 +147,18 @@ def _extract_track_id_from_scatter_signal(signal_data):
         if isinstance(node, dict):
             if "track_id" in node and node["track_id"] is not None:
                 return _norm(node["track_id"])
+
+            # Some Vega payloads encode selected rows as a list of dict values.
+            values_node = node.get("values")
+            if isinstance(values_node, list):
+                for item in values_node:
+                    if isinstance(item, dict) and item.get("track_id") is not None:
+                        return _norm(item.get("track_id"))
+                    if isinstance(item, (list, tuple)):
+                        for sub in item:
+                            found = _walk(sub)
+                            if found:
+                                return found
 
             fv = _from_fields_values(node.get("fields"), node.get("values"))
             if fv:
@@ -667,6 +684,24 @@ def update_scatter_and_stores(
     signal_data,
     previous_bounds,
 ):
+    triggered = ctx.triggered_id
+
+    # Perf guard: point-click only updates Track Profile via another callback.
+    # Skip expensive filter/chart work when scatter event has no brush payload.
+    if triggered == "scatter":
+        payload = signal_data or {}
+        brush_payload = payload.get("brush_selection")
+        point_payload = payload.get("track_pick")
+        if point_payload is None:
+            for k, v in payload.items():
+                if isinstance(k, str) and "track_pick" in k:
+                    point_payload = v
+                    break
+        # Only short-circuit on pure point-pick events.
+        # Keep initial render and brush interactions intact.
+        if (point_payload is not None) and (not brush_payload):
+            return no_update, no_update, no_update, no_update, previous_bounds
+
     filtered_df = _compute_filtered_df(
         keyword,
         genre_values,
@@ -676,8 +711,6 @@ def update_scatter_and_stores(
         liked_filter_values,
         liked_tracks,
     )
-
-    triggered = ctx.triggered_id
 
     brush = (signal_data or {}).get("brush_selection")
     if brush and "energy" in brush and "valence" in brush:
