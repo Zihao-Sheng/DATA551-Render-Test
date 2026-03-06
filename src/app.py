@@ -37,7 +37,23 @@ REQUIRED_COLUMNS = [
     "liveness",
     "instrumentalness",
 ]
-data = pd.read_csv(DATA_PATH, usecols=REQUIRED_COLUMNS)
+DTYPE_MAP = {
+    "track_id": "string",
+    "artists": "string",
+    "track_name": "string",
+    "track_genre": "string",
+    "popularity": "int16",
+    "explicit": "boolean",
+    "tempo": "float32",
+    "danceability": "float32",
+    "energy": "float32",
+    "valence": "float32",
+    "acousticness": "float32",
+    "speechiness": "float32",
+    "liveness": "float32",
+    "instrumentalness": "float32",
+}
+data = pd.read_csv(DATA_PATH, usecols=REQUIRED_COLUMNS, dtype=DTYPE_MAP)
 data["_track_name_lc"] = data["track_name"].astype(str).str.lower()
 data["_artists_lc"] = data["artists"].astype(str).str.lower()
 data["track_id"] = data["track_id"].astype(str)
@@ -350,6 +366,13 @@ def _compute_selected_df(filtered_df, bounds):
         (filtered_df["energy"] >= e0) & (filtered_df["energy"] <= e1) &
         (filtered_df["valence"] >= v0) & (filtered_df["valence"] <= v1)
     ]
+
+
+def _df_from_filtered_index(filtered_index_data):
+    idx = list(filtered_index_data or [])
+    if not idx:
+        return data.iloc[0:0]
+    return data.loc[idx]
 
 app.layout = html.Div(
     className="page",
@@ -667,6 +690,7 @@ app.layout = html.Div(
         ),
 
         dcc.Store(id="brush-bounds-store"),
+        dcc.Store(id="filtered-index-store", data=[]),
         dcc.Store(id="selected-genres-store", data=[]),
         dcc.Store(id="liked-tracks-store", data=[], storage_type="local"),
         dcc.Store(id="selected-track-store", data=None),
@@ -750,12 +774,7 @@ def render_selected_genres_box(selected_genres):
 
 
 @callback(
-    Output("scatter", "spec"),
-    Output("scatter-meta", "children"),
-    Output("header-stats", "children"),
-    Output("filter-hint", "children"),
-    Output("brush-bounds-store", "data"),
-    Input("toolbox-mode", "value"),
+    Output("filtered-index-store", "data"),
     Input("keyword", "value"),
     Input("selected-genres-store", "data"),
     Input("explicit", "value"),
@@ -763,18 +782,34 @@ def render_selected_genres_box(selected_genres):
     Input("tempo-range", "value"),
     Input("popularity-range", "value"),
     Input("liked-tracks-store", "data"),
+)
+def update_filtered_index_store(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, liked_tracks):
+    filtered_df = _compute_filtered_df(
+        keyword,
+        genre_values,
+        explicit_mode,
+        tempo_bounds,
+        pop_bounds,
+        liked_filter_values,
+        liked_tracks,
+    )
+    return filtered_df.index.tolist()
+
+
+@callback(
+    Output("scatter", "spec"),
+    Output("scatter-meta", "children"),
+    Output("header-stats", "children"),
+    Output("filter-hint", "children"),
+    Output("brush-bounds-store", "data"),
+    Input("toolbox-mode", "value"),
+    Input("filtered-index-store", "data"),
     Input("scatter", "signalData"),
     State("brush-bounds-store", "data"),
 )
 def update_scatter_and_stores(
     mode,
-    keyword,
-    genre_values,
-    explicit_mode,
-    liked_filter_values,
-    tempo_bounds,
-    pop_bounds,
-    liked_tracks,
+    filtered_index_data,
     signal_data,
     previous_bounds,
 ):
@@ -796,15 +831,7 @@ def update_scatter_and_stores(
         if (point_payload is not None) and (not brush_payload):
             return no_update, no_update, no_update, no_update, previous_bounds
 
-    filtered_df = _compute_filtered_df(
-        keyword,
-        genre_values,
-        explicit_mode,
-        tempo_bounds,
-        pop_bounds,
-        liked_filter_values,
-        liked_tracks,
-    )
+    filtered_df = _df_from_filtered_index(filtered_index_data)
 
     brush = (signal_data or {}).get("brush_selection")
     if brush and "energy" in brush and "valence" in brush:
@@ -864,25 +891,11 @@ def update_scatter_and_stores(
 
 @callback(
     Output("genre-bar", "spec"),
-    Input("keyword", "value"),
-    Input("selected-genres-store", "data"),
-    Input("explicit", "value"),
-    Input("liked-only", "value"),
-    Input("tempo-range", "value"),
-    Input("popularity-range", "value"),
+    Input("filtered-index-store", "data"),
     Input("brush-bounds-store", "data"),
-    Input("liked-tracks-store", "data"),
 )
-def update_genre_bar(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
-    filtered_df = _compute_filtered_df(
-        keyword,
-        genre_values,
-        explicit_mode,
-        tempo_bounds,
-        pop_bounds,
-        liked_filter_values,
-        liked_tracks,
-    )
+def update_genre_bar(filtered_index_data, bounds):
+    filtered_df = _df_from_filtered_index(filtered_index_data)
     df = _compute_selected_df(filtered_df, bounds)
     chart = make_genre_bar(df, top_n=10, width="container", height=220)
     return chart.to_dict()
@@ -890,25 +903,11 @@ def update_genre_bar(keyword, genre_values, explicit_mode, liked_filter_values, 
 
 @callback(
     Output("distribution", "spec"),
-    Input("keyword", "value"),
-    Input("selected-genres-store", "data"),
-    Input("explicit", "value"),
-    Input("liked-only", "value"),
-    Input("tempo-range", "value"),
-    Input("popularity-range", "value"),
+    Input("filtered-index-store", "data"),
     Input("brush-bounds-store", "data"),
-    Input("liked-tracks-store", "data"),
 )
-def update_distribution(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
-    filtered_df = _compute_filtered_df(
-        keyword,
-        genre_values,
-        explicit_mode,
-        tempo_bounds,
-        pop_bounds,
-        liked_filter_values,
-        liked_tracks,
-    )
+def update_distribution(filtered_index_data, bounds):
+    filtered_df = _df_from_filtered_index(filtered_index_data)
     df = _compute_selected_df(filtered_df, bounds)
     chart = make_distribution(df, max_points=2000, width=360, height=160)
     return chart.to_dict()
@@ -916,25 +915,11 @@ def update_distribution(keyword, genre_values, explicit_mode, liked_filter_value
 
 @callback(
     Output("audio-profile", "spec"),
-    Input("keyword", "value"),
-    Input("selected-genres-store", "data"),
-    Input("explicit", "value"),
-    Input("liked-only", "value"),
-    Input("tempo-range", "value"),
-    Input("popularity-range", "value"),
+    Input("filtered-index-store", "data"),
     Input("brush-bounds-store", "data"),
-    Input("liked-tracks-store", "data"),
 )
-def update_audio_profile(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
-    filtered_df = _compute_filtered_df(
-        keyword,
-        genre_values,
-        explicit_mode,
-        tempo_bounds,
-        pop_bounds,
-        liked_filter_values,
-        liked_tracks,
-    )
+def update_audio_profile(filtered_index_data, bounds):
+    filtered_df = _df_from_filtered_index(filtered_index_data)
     df = _compute_selected_df(filtered_df, bounds)
     chart = make_audio_profile(df, width="container", height=235)
     return chart.to_dict()
@@ -942,25 +927,12 @@ def update_audio_profile(keyword, genre_values, explicit_mode, liked_filter_valu
 
 @callback(
     Output("song-list-container", "children"),
-    Input("keyword", "value"),
-    Input("selected-genres-store", "data"),
-    Input("explicit", "value"),
-    Input("liked-only", "value"),
-    Input("tempo-range", "value"),
-    Input("popularity-range", "value"),
+    Input("filtered-index-store", "data"),
     Input("brush-bounds-store", "data"),
     Input("liked-tracks-store", "data"),
 )
-def update_song_list(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
-    filtered_df = _compute_filtered_df(
-        keyword,
-        genre_values,
-        explicit_mode,
-        tempo_bounds,
-        pop_bounds,
-        liked_filter_values,
-        liked_tracks,
-    )
+def update_song_list(filtered_index_data, bounds, liked_tracks):
+    filtered_df = _df_from_filtered_index(filtered_index_data)
     df = _compute_selected_df(filtered_df, bounds)
     if df is None or len(df) == 0:
         return html.Div(
@@ -1052,22 +1024,12 @@ def update_selected_track(signal_data, active_cell, _similar_open_clicks, viewpo
     Output("song-profile-container", "children"),
     Input("selected-track-store", "data"),
     Input("liked-tracks-store", "data"),
-    Input("keyword", "value"),
-    Input("selected-genres-store", "data"),
-    Input("explicit", "value"),
-    Input("liked-only", "value"),
-    Input("tempo-range", "value"),
-    Input("popularity-range", "value"),
+    Input("filtered-index-store", "data"),
 )
 def render_song_profile(
     selected_track,
     liked_tracks,
-    keyword,
-    genre_values,
-    explicit_mode,
-    liked_filter_values,
-    tempo_bounds,
-    pop_bounds,
+    filtered_index_data,
 ):
     track_id = str((selected_track or {}).get("track_id", "")).strip()
     if not track_id:
@@ -1079,15 +1041,7 @@ def render_song_profile(
 
     liked_set = {str(x) for x in (liked_tracks or [])}
     is_liked = track_id in liked_set
-    filtered_df = _compute_filtered_df(
-        keyword,
-        genre_values,
-        explicit_mode,
-        tempo_bounds,
-        pop_bounds,
-        liked_filter_values,
-        liked_tracks,
-    )
+    filtered_df = _df_from_filtered_index(filtered_index_data)
     genre_color = _get_scatter_genre_color(str(row.get("track_genre", "")), filtered_df)
 
     theta = ["Energy", "Valence", "Dance", "Acoustic", "Speech", "Live"]
@@ -1252,27 +1206,13 @@ def highlight_song_table_row(active_cell, columns):
 @callback(
     Output("similar-track-dropdown", "options"),
     Output("similar-track-dropdown", "value"),
-    Input("keyword", "value"),
-    Input("selected-genres-store", "data"),
-    Input("explicit", "value"),
-    Input("liked-only", "value"),
-    Input("tempo-range", "value"),
-    Input("popularity-range", "value"),
+    Input("filtered-index-store", "data"),
     Input("brush-bounds-store", "data"),
-    Input("liked-tracks-store", "data"),
     Input("similar-track-dropdown", "search_value"),
     State("similar-track-dropdown", "value"),
 )
-def update_similar_dropdown(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks, search_value, current_value):
-    filtered_df = _compute_filtered_df(
-        keyword,
-        genre_values,
-        explicit_mode,
-        tempo_bounds,
-        pop_bounds,
-        liked_filter_values,
-        liked_tracks,
-    )
+def update_similar_dropdown(filtered_index_data, bounds, search_value, current_value):
+    filtered_df = _df_from_filtered_index(filtered_index_data)
     selected_df = _compute_selected_df(filtered_df, bounds)
     current_value_str = str(current_value) if current_value is not None else None
     if selected_df is None or len(selected_df) == 0:
@@ -1322,31 +1262,18 @@ def update_similar_dropdown(keyword, genre_values, explicit_mode, liked_filter_v
 @callback(
     Output("similar-tracks-container", "children"),
     Input("similar-track-dropdown", "value"),
-    State("keyword", "value"),
-    State("selected-genres-store", "data"),
-    State("explicit", "value"),
-    State("liked-only", "value"),
-    State("tempo-range", "value"),
-    State("popularity-range", "value"),
+    State("filtered-index-store", "data"),
     State("brush-bounds-store", "data"),
     State("liked-tracks-store", "data"),
 )
-def update_similar_tracks(track_id, keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, bounds, liked_tracks):
+def update_similar_tracks(track_id, filtered_index_data, bounds, liked_tracks):
     if not track_id:
         return html.Div(
             "Select a track above to discover audio-similar but underrated songs.",
             style={"fontSize": "12px", "color": "#aaa", "padding": "8px 0", "lineHeight": "1.5"},
         )
 
-    filtered_df = _compute_filtered_df(
-        keyword,
-        genre_values,
-        explicit_mode,
-        tempo_bounds,
-        pop_bounds,
-        liked_filter_values,
-        liked_tracks,
-    )
+    filtered_df = _df_from_filtered_index(filtered_index_data)
     selected_df = _compute_selected_df(filtered_df, bounds)
     pool = selected_df if selected_df is not None and len(selected_df) > 0 else filtered_df
     required = ["track_id", "track_name", "artists", "track_genre", "popularity", *AUDIO_FEATURES]
