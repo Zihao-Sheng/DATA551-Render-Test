@@ -120,8 +120,6 @@ def _extract_track_id_from_scatter_signal(signal_data):
             if isinstance(k, str) and "track_pick" in k:
                 point_payload = v
                 break
-    if point_payload is None:
-        return None
 
     def _norm(v):
         if isinstance(v, (list, tuple)):
@@ -181,7 +179,11 @@ def _extract_track_id_from_scatter_signal(signal_data):
                     return found
         return None
 
-    return _walk(point_payload)
+    # Prefer the named point-selection payload; fallback to scanning all signal data.
+    found = _walk(point_payload) if point_payload is not None else None
+    if found:
+        return found
+    return _walk(signal_data)
 
 
 def _get_track_row(track_id: str):
@@ -449,7 +451,14 @@ app.layout = html.Div(
                                     id="scatter",
                                     spec={},
                                     opt={"renderer": "svg", "actions": False},
-                                    signalsToObserve=["brush_selection", "track_pick"],
+                                    signalsToObserve=[
+                                        "brush_selection",
+                                        "track_pick",
+                                        "track_pick_tuple",
+                                        "track_pick_toggle",
+                                        "track_pick_modify",
+                                        "track_pick_store",
+                                    ],
                                     style={"width": "100%"},
                                 ),
                             ],
