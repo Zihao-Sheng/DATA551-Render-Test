@@ -55,7 +55,7 @@ def make_scatter(
         genre_group=plot_df["track_genre"].where(plot_df["track_genre"].isin(top), "Other")
     )
     legend_order = list(top) + ["Other"]
-    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#cccccc"]
+    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#e6e6e6"]
 
     base = (
         alt.Chart(plot_df)
