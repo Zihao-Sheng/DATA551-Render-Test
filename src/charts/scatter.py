@@ -55,7 +55,7 @@ def make_scatter(
         genre_group=plot_df["track_genre"].where(plot_df["track_genre"].isin(top), "Other")
     )
     legend_order = list(top) + ["Other"]
-    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#e6e6e6"]
+    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#d4d4d4"]
 
     base = (
         alt.Chart(plot_df)
@@ -116,15 +116,24 @@ def make_scatter(
 
     if mode == "brush":
         brush = alt.selection_interval(name=selection_name, empty=True)
-
-        chart = (
-            base.mark_point(filled=True)
+        other_layer = (
+            base.transform_filter("datum.genre_group === 'Other'")
+            .mark_point(filled=True)
             .encode(
-                opacity=alt.condition(brush, alt.value(0.85), alt.value(0.30)),
+                # Keep "Other" as contextual background so it does not overpower highlighted genres.
+                opacity=alt.condition(brush, alt.value(0.42), alt.value(0.16)),
                 size=size_enc,
             )
-            .add_params(brush, point_pick)
         )
+        color_layer = (
+            base.transform_filter("datum.genre_group !== 'Other'")
+            .mark_point(filled=True)
+            .encode(
+                opacity=alt.condition(brush, alt.value(0.90), alt.value(0.22)),
+                size=size_enc,
+            )
+        )
+        chart = alt.layer(other_layer, color_layer).add_params(brush, point_pick)
 
     else:
         chart = (
