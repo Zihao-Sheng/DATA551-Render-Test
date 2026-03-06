@@ -71,6 +71,9 @@ _feat_min = data[AUDIO_FEATURES].min()
 _feat_max = data[AUDIO_FEATURES].max()
 _feat_rng = (_feat_max - _feat_min).replace(0, 1)
 data_norm = (data[AUDIO_FEATURES] - _feat_min) / _feat_rng
+NORM_FEATURES = [f"_n_{c}" for c in AUDIO_FEATURES]
+for c in AUDIO_FEATURES:
+    data[f"_n_{c}"] = pd.to_numeric(data_norm[c], errors="coerce").astype("float32")
 
 TEMPO_MIN, TEMPO_MAX = 0, 250
 POP_MIN, POP_MAX = 0, 100
@@ -373,6 +376,76 @@ def _df_from_filtered_index(filtered_index_data):
     if not idx:
         return data.iloc[0:0]
     return data.loc[idx]
+
+
+def _build_pool_from_ids(pool_ids):
+    if not pool_ids:
+        return data.iloc[0:0]
+    rows = _track_id_idx.loc[list(pool_ids)]
+    if isinstance(rows, pd.Series):
+        return rows.to_frame().T
+    return rows
+
+
+def _compute_similar_records_from_pool(pool_df, track_id_str):
+    required = [
+        "track_id", "track_name", "artists", "track_genre", "popularity",
+        "energy", "valence", "danceability", *NORM_FEATURES
+    ]
+    missing = [c for c in required if c not in pool_df.columns]
+    if missing:
+        return {"status": "missing", "missing": missing}
+
+    work = pool_df[required].copy()
+    work["track_id"] = work["track_id"].astype(str)
+    work["popularity"] = pd.to_numeric(work["popularity"], errors="coerce")
+    for c in ["energy", "valence", "danceability"]:
+        work[c] = pd.to_numeric(work[c], errors="coerce")
+    for c in NORM_FEATURES:
+        work[c] = pd.to_numeric(work[c], errors="coerce")
+    work = work.dropna(subset=["track_id", "popularity", *NORM_FEATURES]).drop_duplicates("track_id")
+
+    ref_rows = work[work["track_id"] == track_id_str]
+    if ref_rows.empty:
+        return {"status": "ref_not_in_pool"}
+
+    ref = ref_rows.iloc[0]
+    ref_pop = int(ref["popularity"])
+    ref_name = str(ref.get("track_name", "Unknown"))
+    ref_norm = ref[NORM_FEATURES].to_numpy(dtype=float)
+    work_norm = work[NORM_FEATURES].to_numpy(dtype=float)
+    dists = np.linalg.norm(work_norm - ref_norm, axis=1)
+
+    candidates = work.copy()
+    candidates["_dist"] = dists
+    candidates = (
+        candidates[
+            (candidates["track_id"] != track_id_str) &
+            (candidates["popularity"] < ref_pop)
+        ]
+        .nsmallest(10, "_dist")
+        [["track_id", "track_name", "artists", "track_genre", "popularity", "energy", "valence", "danceability"]]
+    )
+    records = tuple(
+        (
+            str(r.track_id),
+            str(r.track_name),
+            str(r.artists),
+            str(r.track_genre),
+            float(r.popularity),
+            float(r.energy),
+            float(r.valence),
+            float(r.danceability),
+        )
+        for r in candidates.itertuples()
+    )
+    return {"status": "ok", "ref_name": ref_name, "ref_pop": ref_pop, "records": records}
+
+
+@lru_cache(maxsize=64)
+def _compute_similar_records_cached(track_id_str, pool_ids_tuple):
+    pool_df = _build_pool_from_ids(pool_ids_tuple)
+    return _compute_similar_records_from_pool(pool_df, track_id_str)
 
 app.layout = html.Div(
     className="page",
@@ -691,6 +764,7 @@ app.layout = html.Div(
 
         dcc.Store(id="brush-bounds-store"),
         dcc.Store(id="filtered-index-store", data=[]),
+        dcc.Store(id="selected-index-store", data=[]),
         dcc.Store(id="selected-genres-store", data=[]),
         dcc.Store(id="liked-tracks-store", data=[], storage_type="local"),
         dcc.Store(id="selected-track-store", data=None),
@@ -802,16 +876,19 @@ def update_filtered_index_store(keyword, genre_values, explicit_mode, liked_filt
     Output("header-stats", "children"),
     Output("filter-hint", "children"),
     Output("brush-bounds-store", "data"),
+    Output("selected-index-store", "data"),
     Input("toolbox-mode", "value"),
     Input("filtered-index-store", "data"),
     Input("scatter", "signalData"),
     State("brush-bounds-store", "data"),
+    State("selected-index-store", "data"),
 )
 def update_scatter_and_stores(
     mode,
     filtered_index_data,
     signal_data,
     previous_bounds,
+    previous_selected_index,
 ):
     triggered = ctx.triggered_id
 
@@ -829,7 +906,7 @@ def update_scatter_and_stores(
         # Only short-circuit on pure point-pick events.
         # Keep initial render and brush interactions intact.
         if (point_payload is not None) and (not brush_payload):
-            return no_update, no_update, no_update, no_update, previous_bounds
+            return no_update, no_update, no_update, no_update, previous_bounds, no_update
 
     filtered_df = _df_from_filtered_index(filtered_index_data)
 
@@ -886,54 +963,54 @@ def update_scatter_and_stores(
         bounds = None
         selected_df = filtered_df
 
-    return spec_out, meta_text, stats_children, filter_hint, bounds
+    selected_index = selected_df.index.tolist() if selected_df is not None else []
+    selected_out = no_update if list(previous_selected_index or []) == selected_index else selected_index
+
+    if previous_bounds == bounds:
+        bounds_out = no_update
+    else:
+        bounds_out = bounds
+
+    return spec_out, meta_text, stats_children, filter_hint, bounds_out, selected_out
 
 
 @callback(
     Output("genre-bar", "spec"),
-    Input("filtered-index-store", "data"),
-    Input("brush-bounds-store", "data"),
+    Input("selected-index-store", "data"),
 )
-def update_genre_bar(filtered_index_data, bounds):
-    filtered_df = _df_from_filtered_index(filtered_index_data)
-    df = _compute_selected_df(filtered_df, bounds)
+def update_genre_bar(selected_index_data):
+    df = _df_from_filtered_index(selected_index_data)
     chart = make_genre_bar(df, top_n=10, width="container", height=220)
     return chart.to_dict()
 
 
 @callback(
     Output("distribution", "spec"),
-    Input("filtered-index-store", "data"),
-    Input("brush-bounds-store", "data"),
+    Input("selected-index-store", "data"),
 )
-def update_distribution(filtered_index_data, bounds):
-    filtered_df = _df_from_filtered_index(filtered_index_data)
-    df = _compute_selected_df(filtered_df, bounds)
+def update_distribution(selected_index_data):
+    df = _df_from_filtered_index(selected_index_data)
     chart = make_distribution(df, max_points=2000, width=360, height=160)
     return chart.to_dict()
 
 
 @callback(
     Output("audio-profile", "spec"),
-    Input("filtered-index-store", "data"),
-    Input("brush-bounds-store", "data"),
+    Input("selected-index-store", "data"),
 )
-def update_audio_profile(filtered_index_data, bounds):
-    filtered_df = _df_from_filtered_index(filtered_index_data)
-    df = _compute_selected_df(filtered_df, bounds)
+def update_audio_profile(selected_index_data):
+    df = _df_from_filtered_index(selected_index_data)
     chart = make_audio_profile(df, width="container", height=235)
     return chart.to_dict()
 
 
 @callback(
     Output("song-list-container", "children"),
-    Input("filtered-index-store", "data"),
-    Input("brush-bounds-store", "data"),
+    Input("selected-index-store", "data"),
     Input("liked-tracks-store", "data"),
 )
-def update_song_list(filtered_index_data, bounds, liked_tracks):
-    filtered_df = _df_from_filtered_index(filtered_index_data)
-    df = _compute_selected_df(filtered_df, bounds)
+def update_song_list(selected_index_data, liked_tracks):
+    df = _df_from_filtered_index(selected_index_data)
     if df is None or len(df) == 0:
         return html.Div(
             "No tracks match your filters.",
@@ -1206,14 +1283,12 @@ def highlight_song_table_row(active_cell, columns):
 @callback(
     Output("similar-track-dropdown", "options"),
     Output("similar-track-dropdown", "value"),
-    Input("filtered-index-store", "data"),
-    Input("brush-bounds-store", "data"),
+    Input("selected-index-store", "data"),
     Input("similar-track-dropdown", "search_value"),
     State("similar-track-dropdown", "value"),
 )
-def update_similar_dropdown(filtered_index_data, bounds, search_value, current_value):
-    filtered_df = _df_from_filtered_index(filtered_index_data)
-    selected_df = _compute_selected_df(filtered_df, bounds)
+def update_similar_dropdown(selected_index_data, search_value, current_value):
+    selected_df = _df_from_filtered_index(selected_index_data)
     current_value_str = str(current_value) if current_value is not None else None
     if selected_df is None or len(selected_df) == 0:
         return [], current_value_str
@@ -1262,65 +1337,48 @@ def update_similar_dropdown(filtered_index_data, bounds, search_value, current_v
 @callback(
     Output("similar-tracks-container", "children"),
     Input("similar-track-dropdown", "value"),
-    State("filtered-index-store", "data"),
-    State("brush-bounds-store", "data"),
+    State("selected-index-store", "data"),
     State("liked-tracks-store", "data"),
 )
-def update_similar_tracks(track_id, filtered_index_data, bounds, liked_tracks):
+def update_similar_tracks(track_id, selected_index_data, liked_tracks):
     if not track_id:
         return html.Div(
             "Select a track above to discover audio-similar but underrated songs.",
             style={"fontSize": "12px", "color": "#aaa", "padding": "8px 0", "lineHeight": "1.5"},
         )
 
-    filtered_df = _df_from_filtered_index(filtered_index_data)
-    selected_df = _compute_selected_df(filtered_df, bounds)
-    pool = selected_df if selected_df is not None and len(selected_df) > 0 else filtered_df
-    required = ["track_id", "track_name", "artists", "track_genre", "popularity", *AUDIO_FEATURES]
-    missing = [c for c in required if c not in pool.columns]
-    if missing:
-        return html.Div("Selected data missing required columns.", style={"fontSize": "12px", "color": "#c00"})
-
-    track_id_str = str(track_id)
-    matches = pool[pool["track_id"].astype(str) == track_id_str]
-    if matches.empty:
-        # Fallback for edge cases where selected set changed after choosing a track
-        matches = data[data["track_id"].astype(str) == track_id_str]
-    if matches.empty:
-        return html.Div("Track not found.", style={"fontSize": "12px", "color": "#c00"})
-
-    ref = matches.iloc[0]
-
-    work = pool[required].copy()
-    work["track_id"] = work["track_id"].astype(str)
-    for c in ["popularity", *AUDIO_FEATURES]:
-        work[c] = pd.to_numeric(work[c], errors="coerce")
-    work = work.dropna(subset=["track_id", "popularity", *AUDIO_FEATURES]).drop_duplicates("track_id")
-
-    ref_rows = work[work["track_id"] == track_id_str]
-    if ref_rows.empty:
+    pool = _df_from_filtered_index(selected_index_data)
+    if pool is None or len(pool) == 0:
         return html.Div("Reference track is not in current selection.", style={"fontSize": "12px", "color": "#c00"})
 
-    ref_pop = int(ref_rows.iloc[0]["popularity"])
-    ref_norm = ((ref_rows.iloc[0][AUDIO_FEATURES] - _feat_min) / _feat_rng).to_numpy(dtype=float)
-    work_norm = ((work[AUDIO_FEATURES] - _feat_min) / _feat_rng).to_numpy(dtype=float)
-    dists = np.linalg.norm(work_norm - ref_norm, axis=1)
+    track_id_str = str(track_id).strip()
+    if not track_id_str:
+        return html.Div("Track not found.", style={"fontSize": "12px", "color": "#c00"})
 
-    candidates = work.copy()
-    candidates["_dist"] = dists
-    candidates = (
-        candidates[
-            (candidates["track_id"] != track_id_str) &
-            (candidates["popularity"] < ref_pop)
-        ]
-        .nsmallest(10, "_dist")
-        [["track_id", "track_name", "artists", "track_genre", "popularity", "energy", "valence", "danceability"]]
-    )
+    pool_ids = tuple(pool["track_id"].astype(str).drop_duplicates().tolist())
+    # Cache similarity ranking for common interactive pool sizes.
+    if len(pool_ids) <= 5000:
+        sim_out = _compute_similar_records_cached(track_id_str, pool_ids)
+    else:
+        sim_out = _compute_similar_records_from_pool(pool, track_id_str)
 
-    if candidates.empty:
+    if sim_out.get("status") == "missing":
+        return html.Div("Selected data missing required columns.", style={"fontSize": "12px", "color": "#c00"})
+    if sim_out.get("status") == "ref_not_in_pool":
+        return html.Div("Reference track is not in current selection.", style={"fontSize": "12px", "color": "#c00"})
+    if sim_out.get("status") != "ok":
+        return html.Div("Track not found.", style={"fontSize": "12px", "color": "#c00"})
+
+    ref_name = sim_out.get("ref_name", "Unknown")
+    ref_pop = int(sim_out.get("ref_pop", 0))
+    records = sim_out.get("records", tuple())
+    if not records:
         return html.Div("No similar lower-popularity tracks found.", style={"fontSize": "12px", "color": "#888"})
 
-    candidates = candidates.copy()
+    candidates = pd.DataFrame(
+        records,
+        columns=["track_id", "track_name", "artists", "track_genre", "popularity", "energy", "valence", "danceability"],
+    )
     liked_set = {str(x) for x in (liked_tracks or [])}
     for col in ["energy", "valence", "danceability"]:
         candidates[col] = candidates[col].round(2)
@@ -1399,7 +1457,7 @@ def update_similar_tracks(track_id, filtered_index_data, bounds, liked_tracks):
     return html.Div(
         [
             html.Div(
-                f"Similar to: {ref['track_name']} (pop {ref_pop})",
+                f"Similar to: {ref_name} (pop {ref_pop})",
                 style={"fontSize": "11px", "color": "#888", "marginBottom": "6px",
                        "fontStyle": "italic", "borderLeft": f"3px solid {GREEN}",
                        "paddingLeft": "8px"},
