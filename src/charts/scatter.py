@@ -6,6 +6,7 @@ BRIGHT_PALETTE = [
     "#9B5DE5", "#00BBF9", "#F15BB5", "#FFD166",
     "#2EC4B6", "#EF476F",
 ]
+OTHER_COLOR = "#d4d4d4"
 
 
 def make_scatter(
@@ -50,17 +51,19 @@ def make_scatter(
     else:
         plot_df = df.copy()
 
+    plot_df = plot_df.assign(_row_id=plot_df.index.astype(str))
+
     top = plot_df["track_genre"].value_counts().head(topk_genres).index
     plot_df = plot_df.assign(
         genre_group=plot_df["track_genre"].where(plot_df["track_genre"].isin(top), "Other")
     )
     legend_order = list(top) + ["Other"]
-    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#d4d4d4"]
+    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + [OTHER_COLOR]
 
     base = (
         alt.Chart(plot_df)
         .encode(
-            detail=alt.Detail("track_id:N"),
+            detail=alt.Detail("_row_id:N"),
             x=alt.X(
                 "energy:Q",
                 title="Energy",
@@ -81,6 +84,9 @@ def make_scatter(
                 legend=alt.Legend(
                     symbolType="circle",
                     symbolSize=100,
+                    symbolOpacity=1,
+                    symbolStrokeColor="#ffffff",
+                    symbolStrokeWidth=0.6,
                     orient="right",
                     titleFontSize=11,
                     labelFontSize=10,
@@ -108,7 +114,7 @@ def make_scatter(
     )
     point_pick = alt.selection_point(
         name=point_selection_name,
-        fields=["track_id"],
+        fields=["_row_id"],
         on="click",
         clear="dblclick",
         empty=False,

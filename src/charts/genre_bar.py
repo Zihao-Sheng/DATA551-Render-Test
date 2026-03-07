@@ -59,10 +59,11 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
                 title="Avg Energy",
                 scale=alt.Scale(scheme="plasma", domain=[0, 1]),
                 legend=alt.Legend(
-                    orient="left",
-                    gradientLength=80,
+                    orient="top",
+                    direction="horizontal",
+                    gradientLength=130,
                     gradientThickness=8,
-                    offset=4,
+                    offset=6,
                     title="Avg Energy",
                     titleFontSize=10,
                     labelFontSize=9,
@@ -96,7 +97,7 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
         .properties(
             width=width,
             height=height,
-            padding={"top": 8, "right": 8, "bottom": 48 if dense else 36, "left": 8},
+            padding={"top": 26, "right": 8, "bottom": 48 if dense else 36, "left": 8},
         )
         .configure(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
         .configure_view(stroke=None)

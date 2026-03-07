@@ -75,7 +75,7 @@ def make_audio_profile(df: pd.DataFrame, *, width: int = 240, height: int = 260)
         .properties(
             width=width,
             height=height,
-            padding={"top": 8, "right": 8, "bottom": 36, "left": 8},
+            padding={"top": 26, "right": 8, "bottom": 36, "left": 8},
         )
         .configure(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
         .configure_view(stroke=None)
