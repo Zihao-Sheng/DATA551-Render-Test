@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 from dash import dash_table
+from dash.dash_table.Format import Format, Scheme
 
 
 def make_song_list_table(
@@ -75,7 +76,14 @@ def make_song_list_table(
         elif c in {"popularity"}:
             column_defs.append({"name": "Popularity", "id": c, "type": "numeric"})
         elif c in {"energy", "valence", "danceability"}:
-            column_defs.append({"name": c.capitalize(), "id": c, "type": "numeric"})
+            column_defs.append(
+                {
+                    "name": c.capitalize(),
+                    "id": c,
+                    "type": "numeric",
+                    "format": Format(precision=3, scheme=Scheme.fixed),
+                }
+            )
         elif c == "track_name":
             column_defs.append({"name": "Title", "id": c, "type": "text"})
         elif c == "artists":

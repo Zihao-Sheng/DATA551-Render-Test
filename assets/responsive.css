@@ -220,6 +220,7 @@ body::-webkit-scrollbar-thumb:hover,
   max-width: 560px;
 }
 
+
 @media (max-width: 1200px) {
   .layout-grid {
     grid-template-columns: 280px minmax(0, 1fr);

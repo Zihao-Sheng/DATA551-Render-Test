@@ -1,6 +1,7 @@
 ﻿import sys
 from pathlib import Path
 from functools import lru_cache
+import copy
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dash import Dash, html, dcc, Input, Output, State, callback, ctx, no_update, ALL
@@ -12,7 +13,7 @@ import plotly.graph_objects as go
 import altair as alt
 alt.data_transformers.disable_max_rows()
 
-from charts.scatter import make_scatter, BRIGHT_PALETTE
+from charts.scatter import make_scatter, BRIGHT_PALETTE, OTHER_COLOR
 from charts.genre_bar import make_genre_bar
 from charts.distribution import make_distribution
 from charts.profile import make_audio_profile
@@ -238,7 +239,109 @@ def _extract_track_id_from_scatter_signal(signal_data):
     return _walk(signal_data)
 
 
-def _get_track_row(track_id: str):
+def _extract_track_payload_from_scatter_signal(signal_data):
+    """
+    Best-effort parser for Vega point-selection payload with extra fields.
+    Returns a dict containing at least track_id when found.
+    """
+    if not signal_data:
+        return None
+
+    point_payload = signal_data.get("track_pick")
+    if point_payload is None:
+        for k, v in (signal_data or {}).items():
+            if isinstance(k, str) and "track_pick" in k:
+                point_payload = v
+                break
+
+    def _norm(v):
+        if isinstance(v, (list, tuple)):
+            if not v:
+                return None
+            v = v[0]
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s if s else None
+
+    def _from_fields_values(fields, values):
+        if not isinstance(fields, list) or not isinstance(values, list):
+            return None
+        mapping = {}
+        for idx, f in enumerate(fields):
+            if not (isinstance(f, dict) and idx < len(values)):
+                continue
+            field_name = f.get("field")
+            if field_name in {"_row_id", "track_id", "track_name", "artists", "track_genre"}:
+                mapping[field_name] = _norm(values[idx])
+        if mapping.get("_row_id") or mapping.get("track_id"):
+            return mapping
+        return None
+
+    def _walk(node):
+        if isinstance(node, dict):
+            if (node.get("_row_id") is not None) or (node.get("track_id") is not None):
+                payload = {
+                    "_row_id": _norm(node.get("_row_id")),
+                    "track_id": _norm(node.get("track_id")),
+                    "track_name": _norm(node.get("track_name")),
+                    "artists": _norm(node.get("artists")),
+                    "track_genre": _norm(node.get("track_genre")),
+                }
+                if payload["_row_id"] or payload["track_id"]:
+                    return payload
+
+            fv = _from_fields_values(node.get("fields"), node.get("values"))
+            if fv:
+                return fv
+
+            values_node = node.get("values")
+            if isinstance(values_node, list):
+                for item in values_node:
+                    found = _walk(item)
+                    if found:
+                        return found
+
+            for k in ("vlPoint", "vlMulti", "vlSingle"):
+                if k in node:
+                    found = _walk(node[k])
+                    if found:
+                        return found
+
+            for value in node.values():
+                found = _walk(value)
+                if found:
+                    return found
+        elif isinstance(node, list):
+            for item in node:
+                found = _walk(item)
+                if found:
+                    return found
+        return None
+
+    found = _walk(point_payload) if point_payload is not None else None
+    if found:
+        return found
+    return _walk(signal_data)
+
+
+def _get_track_row_by_index(row_index):
+    if row_index is None:
+        return None
+    try:
+        idx = int(row_index)
+    except Exception:
+        return None
+    if idx not in data.index:
+        return None
+    row = data.loc[idx].copy()
+    for c in ["popularity", "tempo", *PROFILE_AXES]:
+        if c in row.index:
+            row[c] = pd.to_numeric(row[c], errors="coerce")
+    return row
+
+
+def _get_track_row(track_id: str, *, track_name: str | None = None, artists: str | None = None, track_genre: str | None = None):
     if not track_id:
         return None
     tid = str(track_id).strip()
@@ -248,7 +351,19 @@ def _get_track_row(track_id: str):
         return None
     rows = _track_id_idx.loc[tid]
     if isinstance(rows, pd.DataFrame):
-        row = rows.iloc[0].copy()
+        candidates = rows.copy()
+        # Disambiguate duplicated track_id rows using the selected point metadata.
+        for col, val in (
+            ("track_name", track_name),
+            ("artists", artists),
+            ("track_genre", track_genre),
+        ):
+            if val is None or col not in candidates.columns:
+                continue
+            match = candidates[candidates[col].astype(str).str.strip().str.lower() == str(val).strip().lower()]
+            if len(match) > 0:
+                candidates = match
+        row = candidates.iloc[0].copy()
     else:
         row = rows.copy()
     for c in ["popularity", "tempo", *PROFILE_AXES]:
@@ -259,7 +374,7 @@ def _get_track_row(track_id: str):
 
 def _get_scatter_genre_color(track_genre: str, filtered_df: pd.DataFrame, *, max_points: int = 500, topk_genres: int = 10):
     if filtered_df is None or len(filtered_df) == 0:
-        return "#cccccc"
+        return OTHER_COLOR
 
     # Match scatter sampling logic so profile color aligns with legend colors.
     if len(filtered_df) > max_points:
@@ -279,9 +394,78 @@ def _get_scatter_genre_color(track_genre: str, filtered_df: pd.DataFrame, *, max
 
     top = plot_df["track_genre"].value_counts().head(topk_genres).index.tolist()
     legend_order = top + ["Other"]
-    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + ["#cccccc"]
+    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + [OTHER_COLOR]
     color_map = {g: c for g, c in zip(legend_order, palette)}
     return color_map.get(track_genre, color_map["Other"])
+
+
+def _build_genre_color_map(top_genres):
+    top = [str(g) for g in (top_genres or [])]
+    legend_order = top + ["Other"]
+    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + [OTHER_COLOR]
+    return {g: c for g, c in zip(legend_order, palette)}
+
+
+def _color_for_genre(track_genre: str, genre_color_map):
+    if isinstance(genre_color_map, dict) and genre_color_map:
+        g = str(track_genre or "")
+        return genre_color_map.get(g, genre_color_map.get("Other", OTHER_COLOR))
+    return OTHER_COLOR
+
+
+@lru_cache(maxsize=2048)
+def _build_primary_radar_dict(values_key, color_key, compare_mode_key):
+    theta = ["Energy", "Valence", "Dance", "Acoustic", "Speech", "Live"]
+    values = [float(v) for v in values_key]
+    fig = go.Figure(
+        data=[
+            go.Scatterpolar(
+                r=values + [values[0]],
+                theta=theta + [theta[0]],
+                name=("Locked Track" if compare_mode_key else "Track"),
+                fill="toself",
+                line=dict(color=color_key, width=2),
+                fillcolor=color_key,
+                opacity=0.35,
+                hovertemplate="%{theta}: %{r:.2f}<extra></extra>",
+            )
+        ]
+    )
+    fig.update_layout(
+        margin=dict(l=32, r=24, t=2, b=2),
+        showlegend=False,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=0.97,
+            xanchor="left",
+            x=1.01,
+            font=dict(size=8),
+            bgcolor="rgba(255,255,255,0.0)",
+        ),
+        paper_bgcolor="white",
+        polar=dict(
+            bgcolor="white",
+            radialaxis=dict(visible=True, range=[0, 1], tickfont=dict(size=7), gridcolor="#e6ebf2"),
+            angularaxis=dict(tickfont=dict(size=7)),
+        ),
+    )
+    return fig.to_dict()
+
+
+@lru_cache(maxsize=2048)
+def _build_compare_trace_dict(values_key, color_key):
+    theta = ["Energy", "Valence", "Dance", "Acoustic", "Speech", "Live"]
+    values = [float(v) for v in values_key]
+    return go.Scatterpolar(
+        r=values + [values[0]],
+        theta=theta + [theta[0]],
+        name="Compared Track",
+        fill="none",
+        line=dict(color=color_key or "#666", width=2, dash="dot"),
+        opacity=0.95,
+        hovertemplate="%{theta}: %{r:.2f}<extra></extra>",
+    ).to_plotly_json()
 
 
 def _normalize_key_seq(values):
@@ -715,7 +899,28 @@ app.layout = html.Div(
                             id="track-profile-card",
                             style={**CARD, "marginBottom": 0, "overflow": "visible"},
                             children=[
-                                html.H4("Track Profile", style=SECTION_TITLE),
+                                html.Div(
+                                    style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "8px"},
+                                    children=[
+                                        html.H4("Track Profile", style={**SECTION_TITLE, "marginBottom": 0}),
+                                        html.Button(
+                                            "Compare: Off",
+                                            id="compare-toggle-btn",
+                                            n_clicks=0,
+                                            style={
+                                                "border": "1px solid #dbe5df",
+                                                "backgroundColor": "#f7f9f8",
+                                                "color": "#60756a",
+                                                "fontSize": "10px",
+                                                "fontWeight": "600",
+                                                "padding": "4px 7px",
+                                                "borderRadius": "8px",
+                                                "cursor": "pointer",
+                                                "whiteSpace": "nowrap",
+                                            },
+                                        ),
+                                    ],
+                                ),
                                 html.Div(
                                     "Click a song from scatter / similar list / table to view its profile.",
                                     style={"fontSize": "9px", "color": "#888", "marginBottom": "7px", "lineHeight": "1.4"},
@@ -771,6 +976,9 @@ app.layout = html.Div(
         dcc.Store(id="selected-genres-store", data=[]),
         dcc.Store(id="liked-tracks-store", data=[], storage_type="local"),
         dcc.Store(id="selected-track-store", data=None),
+        dcc.Store(id="scatter-genre-color-map-store", data={}),
+        dcc.Store(id="compare-mode-store", data=False),
+        dcc.Store(id="locked-track-store", data=None),
     ],
 )
 
@@ -880,6 +1088,7 @@ def update_filtered_index_store(keyword, genre_values, explicit_mode, liked_filt
     Output("filter-hint", "children"),
     Output("brush-bounds-store", "data"),
     Output("selected-index-store", "data"),
+    Output("scatter-genre-color-map-store", "data"),
     Input("toolbox-mode", "value"),
     Input("filtered-index-store", "data"),
     Input("scatter", "signalData"),
@@ -909,7 +1118,7 @@ def update_scatter_and_stores(
         # Only short-circuit on pure point-pick events.
         # Keep initial render and brush interactions intact.
         if (point_payload is not None) and (not brush_payload):
-            return no_update, no_update, no_update, no_update, previous_bounds, no_update
+            return no_update, no_update, no_update, no_update, previous_bounds, no_update, no_update
 
     filtered_df = _df_from_filtered_index(filtered_index_data)
 
@@ -919,10 +1128,9 @@ def update_scatter_and_stores(
         v0, v1 = brush["valence"]
         bounds = {"energy": [e0, e1], "valence": [v0, v1]}
         selected_df = _compute_selected_df(filtered_df, bounds)
-    elif triggered == "scatter" and previous_bounds:
-        bounds = previous_bounds
-        selected_df = _compute_selected_df(filtered_df, bounds)
     else:
+        # Clearing brush should immediately clear selection:
+        # selected set falls back to all filtered tracks.
         bounds = None
         selected_df = filtered_df
 
@@ -957,8 +1165,9 @@ def update_scatter_and_stores(
 
     if triggered == "scatter" and signal_data:
         spec_out = no_update
+        genre_color_map_out = no_update
     else:
-        chart, _ = make_scatter(
+        chart, scatter_meta = make_scatter(
             filtered_df,
             mode=mode,
             max_points=500,
@@ -969,6 +1178,7 @@ def update_scatter_and_stores(
             height=320,
         )
         spec_out = chart.to_dict()
+        genre_color_map_out = _build_genre_color_map(scatter_meta.get("top_genres", []))
         bounds = None
         selected_df = filtered_df
 
@@ -980,7 +1190,7 @@ def update_scatter_and_stores(
     else:
         bounds_out = bounds
 
-    return spec_out, meta_text, stats_children, filter_hint, bounds_out, selected_out
+    return spec_out, meta_text, stats_children, filter_hint, bounds_out, selected_out, genre_color_map_out
 
 
 @callback(
@@ -989,7 +1199,7 @@ def update_scatter_and_stores(
 )
 def update_genre_bar(selected_index_data):
     df = _df_from_filtered_index(selected_index_data)
-    chart = make_genre_bar(df, top_n=10, width="container", height=220)
+    chart = make_genre_bar(df, top_n=10, width="container", height=255)
     return chart.to_dict()
 
 
@@ -1009,7 +1219,7 @@ def update_distribution(selected_index_data):
 )
 def update_audio_profile(selected_index_data):
     df = _df_from_filtered_index(selected_index_data)
-    chart = make_audio_profile(df, width="container", height=235)
+    chart = make_audio_profile(df, width="container", height=255)
     return chart.to_dict()
 
 
@@ -1081,6 +1291,7 @@ def update_selected_track(signal_data, active_cell, _similar_open_clicks, viewpo
     triggered = ctx.triggered_id
     track_id = None
     source = None
+    payload = {}
 
     if isinstance(triggered, dict) and triggered.get("type") == "similar-open":
         triggered_value = (ctx.triggered[0] or {}).get("value") if ctx.triggered else None
@@ -1093,77 +1304,184 @@ def update_selected_track(signal_data, active_cell, _similar_open_clicks, viewpo
             row_idx = active_cell.get("row")
             visible_rows = viewport_data or table_data or []
             if row_idx is not None and 0 <= row_idx < len(visible_rows):
-                track_id = str(visible_rows[row_idx].get("track_id", "")).strip()
+                row_data = visible_rows[row_idx]
+                track_id = str(row_data.get("track_id", "")).strip()
+                payload = {
+                    "track_name": row_data.get("track_name"),
+                    "artists": row_data.get("artists"),
+                    "track_genre": row_data.get("track_genre"),
+                }
                 source = "song-table"
     elif triggered == "scatter":
-        track_id = _extract_track_id_from_scatter_signal(signal_data)
+        extracted = _extract_track_payload_from_scatter_signal(signal_data) or {}
+        row_id = str(extracted.get("_row_id", "")).strip()
+        row_from_idx = _get_track_row_by_index(row_id) if row_id else None
+        if row_from_idx is not None:
+            track_id = str(row_from_idx.get("track_id", "")).strip()
+            payload = {
+                "row_index": int(row_id),
+                "track_name": row_from_idx.get("track_name"),
+                "artists": row_from_idx.get("artists"),
+                "track_genre": row_from_idx.get("track_genre"),
+            }
+        else:
+            track_id = str(extracted.get("track_id", "")).strip()
+            payload = {
+                "track_name": extracted.get("track_name"),
+                "artists": extracted.get("artists"),
+                "track_genre": extracted.get("track_genre"),
+            }
         source = "scatter"
 
     if not track_id:
         return no_update
-    if current_selected and str(current_selected.get("track_id")) == track_id:
-        return no_update
-    return {"track_id": track_id, "source": source}
+    if current_selected:
+        same_track = str(current_selected.get("track_id")) == track_id
+        prev_row = current_selected.get("row_index")
+        new_row = payload.get("row_index")
+        same_row = (prev_row is None and new_row is None) or (prev_row == new_row)
+        if same_track and same_row:
+            return no_update
+    return {"track_id": track_id, "source": source, **payload}
+
+
+@callback(
+    Output("compare-mode-store", "data"),
+    Output("locked-track-store", "data"),
+    Input("compare-toggle-btn", "n_clicks"),
+    State("compare-mode-store", "data"),
+    State("selected-track-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_compare_mode(_n, compare_mode, selected_track):
+    is_on = bool(compare_mode)
+    if not is_on:
+        track_id = str((selected_track or {}).get("track_id", "")).strip()
+        if not track_id:
+            return no_update, no_update
+        return True, dict(selected_track or {})
+    return False, None
+
+
+@callback(
+    Output("compare-toggle-btn", "children"),
+    Output("compare-toggle-btn", "style"),
+    Input("compare-mode-store", "data"),
+)
+def render_compare_button(compare_mode):
+    is_on = bool(compare_mode)
+    base = {
+        "border": "1px solid #dbe5df",
+        "fontSize": "10px",
+        "fontWeight": "600",
+        "padding": "4px 7px",
+        "borderRadius": "8px",
+        "cursor": "pointer",
+        "whiteSpace": "nowrap",
+    }
+    if is_on:
+        return "Compare: On", {**base, "backgroundColor": "#e9f7ef", "color": "#2d6a4f", "border": "1px solid #bfe4cd"}
+    return "Compare: Off", {**base, "backgroundColor": "#f7f9f8", "color": "#60756a"}
 
 
 @callback(
     Output("song-profile-container", "children"),
     Input("selected-track-store", "data"),
     Input("liked-tracks-store", "data"),
-    Input("filtered-index-store", "data"),
+    Input("scatter-genre-color-map-store", "data"),
+    Input("compare-mode-store", "data"),
+    Input("locked-track-store", "data"),
 )
 def render_song_profile(
     selected_track,
     liked_tracks,
-    filtered_index_data,
+    genre_color_map,
+    compare_mode,
+    locked_track,
 ):
-    track_id = str((selected_track or {}).get("track_id", "")).strip()
+    selected_id = str((selected_track or {}).get("track_id", "")).strip()
+    locked_id = str((locked_track or {}).get("track_id", "")).strip()
+    compare_on = bool(compare_mode)
+    primary_track = (locked_track or {}) if (compare_on and locked_id) else (selected_track or {})
+    track_id = str(primary_track.get("track_id", "")).strip()
     if not track_id:
         return html.Div("No song selected yet.", style={"fontSize": "12px", "color": "#9aa1ab"})
 
-    row = _get_track_row(track_id)
+    primary_row_index = primary_track.get("row_index")
+    row = _get_track_row_by_index(primary_row_index)
+    if row is None:
+        row = _get_track_row(
+            track_id,
+            track_name=primary_track.get("track_name"),
+            artists=primary_track.get("artists"),
+            track_genre=primary_track.get("track_genre"),
+        )
     if row is None:
         return html.Div("Track not found in dataset.", style={"fontSize": "12px", "color": "#c00"})
 
     liked_set = {str(x) for x in (liked_tracks or [])}
     is_liked = track_id in liked_set
-    filtered_df = _df_from_filtered_index(filtered_index_data)
-    genre_color = _get_scatter_genre_color(str(row.get("track_genre", "")), filtered_df)
+    genre_color = _color_for_genre(str(row.get("track_genre", "")), genre_color_map)
 
-    theta = ["Energy", "Valence", "Dance", "Acoustic", "Speech", "Live"]
-    values = [float(row.get(c, 0) if pd.notna(row.get(c, np.nan)) else 0.0) for c in PROFILE_AXES]
-    fig = go.Figure(
-        data=[
-            go.Scatterpolar(
-                r=values + [values[0]],
-                theta=theta + [theta[0]],
-                fill="toself",
-                line=dict(color=genre_color, width=2),
-                fillcolor=genre_color,
-                opacity=0.35,
-                hovertemplate="%{theta}: %{r:.2f}<extra></extra>",
+    compare_row = None
+    compare_genre_color = None
+    compare_id = None
+    if compare_on and selected_id and selected_id != track_id:
+        compare_row_index = (selected_track or {}).get("row_index")
+        compare_row = _get_track_row_by_index(compare_row_index)
+        if compare_row is None:
+            compare_row = _get_track_row(
+                selected_id,
+                track_name=(selected_track or {}).get("track_name"),
+                artists=(selected_track or {}).get("artists"),
+                track_genre=(selected_track or {}).get("track_genre"),
             )
-        ]
-    )
-    fig.update_layout(
-        margin=dict(l=32, r=24, t=2, b=2),
-        showlegend=False,
-        paper_bgcolor="white",
-        polar=dict(
-            bgcolor="white",
-            radialaxis=dict(visible=True, range=[0, 1], tickfont=dict(size=7), gridcolor="#e6ebf2"),
-            angularaxis=dict(tickfont=dict(size=7)),
-        ),
-    )
+        if compare_row is not None:
+            compare_id = selected_id
+            compare_genre_color = _color_for_genre(str(compare_row.get("track_genre", "")), genre_color_map)
+
+    values = [float(row.get(c, 0) if pd.notna(row.get(c, np.nan)) else 0.0) for c in PROFILE_AXES]
+    primary_key = tuple(round(v, 4) for v in values)
+    fig_dict = copy.deepcopy(_build_primary_radar_dict(primary_key, str(genre_color), bool(compare_on)))
+    has_compare = False
+    if compare_row is not None:
+        cvals = [float(compare_row.get(c, 0) if pd.notna(compare_row.get(c, np.nan)) else 0.0) for c in PROFILE_AXES]
+        compare_key = tuple(round(v, 4) for v in cvals)
+        fig_dict["data"].append(_build_compare_trace_dict(compare_key, str(compare_genre_color or "#666")))
+        has_compare = True
+    fig_dict.setdefault("layout", {})["showlegend"] = bool(has_compare)
+    fig = go.Figure(fig_dict)
 
     pop = int(row["popularity"]) if pd.notna(row.get("popularity", np.nan)) else 0
     tempo = int(row["tempo"]) if pd.notna(row.get("tempo", np.nan)) else 0
     explicit_text = "Explicit" if bool(row.get("explicit", False)) else "Clean"
+    pop_text = f"Pop {pop}"
+    tempo_text = f"Tempo {tempo}"
+    explicit_badge_text = explicit_text
+    badge_font_size = "10px"
+    left_col_flex = "0 0 22%"
+    radar_width = "78%"
+    if compare_row is not None:
+        cpop = int(compare_row["popularity"]) if pd.notna(compare_row.get("popularity", np.nan)) else 0
+        ctempo = int(compare_row["tempo"]) if pd.notna(compare_row.get("tempo", np.nan)) else 0
+        cexplicit_text = "Explicit" if bool(compare_row.get("explicit", False)) else "Clean"
+        pop_text = f"Pop {pop} vs {cpop}"
+        tempo_text = f"Tempo {tempo} vs {ctempo}"
+        explicit_badge_text = f"{explicit_text} vs {cexplicit_text}"
+        badge_font_size = "9px"
+        left_col_flex = "0 0 26%"
+        radar_width = "74%"
 
     return html.Div(
         [
             html.Div(
-                style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start", "gap": "8px"},
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "minmax(0, 1fr) auto",
+                    "alignItems": "start",
+                    "columnGap": "8px",
+                    "minHeight": "52px",
+                },
                 children=[
                     html.Div(
                         [
@@ -1172,8 +1490,27 @@ def render_song_profile(
                                 f"{row.get('artists', 'Unknown')}  ·  {row.get('track_genre', 'Unknown')}",
                                 style={"fontSize": "11px", "color": "#6b7280", "marginTop": "1px"},
                             ),
+                            html.Div(
+                                (
+                                    f"Compare with: {compare_row.get('track_name', 'Unknown')}  ·  {compare_row.get('artists', 'Unknown')}"
+                                    if compare_row is not None else ""
+                                ),
+                                style={
+                                    "fontSize": "10px",
+                                    "color": "#8a98a6",
+                                    "marginTop": "2px",
+                                    "fontStyle": "italic",
+                                    "display": "block",
+                                    "maxWidth": "100%",
+                                    "whiteSpace": "nowrap",
+                                    "overflow": "hidden",
+                                    "textOverflow": "ellipsis",
+                                    "height": "14px",
+                                    "lineHeight": "14px",
+                                },
+                            ),
                         ],
-                        style={"minWidth": 0},
+                        style={"minWidth": 0, "flex": "1 1 auto", "overflow": "hidden"},
                     ),
                     html.Div(
                         [
@@ -1222,9 +1559,39 @@ def render_song_profile(
                         [
                             html.Div(
                                 [
-                                    html.Span(f"Pop {pop}", style={**BADGE, "backgroundColor": "#e8f5e9", "color": "#2d6a4f", "fontSize": "10px"}),
-                                    html.Span(f"Tempo {tempo}", style={**BADGE, "backgroundColor": "#e7f0ff", "color": "#1d4ed8", "fontSize": "10px"}),
-                                    html.Span(explicit_text, style={**BADGE, "backgroundColor": "#fff4e6", "color": "#9a3412", "fontSize": "10px"}),
+                                    html.Span(
+                                        pop_text,
+                                        style={
+                                            **BADGE,
+                                            "backgroundColor": "#e8f5e9",
+                                            "color": "#2d6a4f",
+                                            "fontSize": badge_font_size,
+                                            "padding": "2px 6px",
+                                            "whiteSpace": "nowrap",
+                                        },
+                                    ),
+                                    html.Span(
+                                        tempo_text,
+                                        style={
+                                            **BADGE,
+                                            "backgroundColor": "#e7f0ff",
+                                            "color": "#1d4ed8",
+                                            "fontSize": badge_font_size,
+                                            "padding": "2px 6px",
+                                            "whiteSpace": "nowrap",
+                                        },
+                                    ),
+                                    html.Span(
+                                        explicit_badge_text,
+                                        style={
+                                            **BADGE,
+                                            "backgroundColor": "#fff4e6",
+                                            "color": "#9a3412",
+                                            "fontSize": badge_font_size,
+                                            "padding": "2px 6px",
+                                            "whiteSpace": "nowrap",
+                                        },
+                                    ),
                                 ],
                                 style={"display": "flex", "flexDirection": "column", "alignItems": "flex-start", "gap": "5px", "minWidth": 0},
                             ),
@@ -1236,13 +1603,13 @@ def render_song_profile(
                             "justifyContent": "center",
                             "gap": "5px",
                             "minWidth": 0,
-                            "flex": "0 0 28%",
+                            "flex": left_col_flex,
                         },
                     ),
                     dcc.Graph(
                         figure=fig,
                         config={"displayModeBar": False, "staticPlot": True},
-                        style={"height": "148px", "width": "72%", "minWidth": "220px", "marginLeft": "-8px"},
+                        style={"height": "152px", "width": radar_width, "minWidth": "240px", "marginLeft": "0px"},
                     ),
                 ],
                 style={"display": "flex", "flexWrap": "nowrap", "alignItems": "center", "gap": "2px"},
@@ -1256,15 +1623,17 @@ def render_song_profile(
     Output("similar-track-dropdown", "value", allow_duplicate=True),
     Input("profile-show-similar-btn", "n_clicks"),
     State("selected-track-store", "data"),
+    State("compare-mode-store", "data"),
+    State("locked-track-store", "data"),
     prevent_initial_call=True,
 )
-def push_profile_track_to_similar(_clicks, selected_track):
+def push_profile_track_to_similar(_clicks, selected_track, compare_mode, locked_track):
     if _clicks in (None, 0):
         return no_update
-    track_id = str((selected_track or {}).get("track_id", "")).strip()
-    source = str((selected_track or {}).get("source", "")).strip()
-    if source == "song-table":
-        return no_update
+    compare_on = bool(compare_mode)
+    locked_id = str((locked_track or {}).get("track_id", "")).strip()
+    selected_id = str((selected_track or {}).get("track_id", "")).strip()
+    track_id = locked_id if (compare_on and locked_id) else selected_id
     if not track_id:
         return no_update
     return track_id
