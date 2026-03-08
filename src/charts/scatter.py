@@ -38,10 +38,9 @@ def make_scatter(
         # Stable downsampling: pick a deterministic subset by track_id hash
         # so points don't "jump" between callback updates.
         if "track_id" in df.columns:
-            work = df.copy()
-            hash_series = pd.util.hash_pandas_object(work["track_id"].astype(str), index=False)
+            hash_series = pd.util.hash_pandas_object(df["track_id"].astype(str), index=False)
             plot_df = (
-                work.assign(_stable_hash=hash_series.values)
+                df.assign(_stable_hash=hash_series.values)
                 .sort_values("_stable_hash", kind="mergesort")
                 .head(max_points)
                 .drop(columns=["_stable_hash"])
@@ -49,7 +48,7 @@ def make_scatter(
         else:
             plot_df = df.sample(n=max_points, random_state=42)
     else:
-        plot_df = df.copy()
+        plot_df = df
 
     plot_df = plot_df.assign(_row_id=plot_df.index.astype(str))
 

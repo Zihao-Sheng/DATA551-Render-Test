@@ -208,7 +208,12 @@ def make_song_list_table(
             {"selector": ".dash-tooltip:before, .dash-tooltip:after", "rule": "border-bottom-color: rgba(20,44,32,0.92) !important;"},
         ],
         tooltip_data=[
-            {k: {"value": str(v), "type": "markdown"} for k, v in row.items()} for row in data
+            {
+                "track_name": {"value": str(row.get("track_name", "")), "type": "markdown"},
+                "artists": {"value": str(row.get("artists", "")), "type": "markdown"},
+                "track_genre": {"value": str(row.get("track_genre", "")), "type": "markdown"},
+            }
+            for row in data
         ],
         tooltip_duration=None,
     )

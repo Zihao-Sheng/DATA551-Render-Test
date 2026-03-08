@@ -372,33 +372,6 @@ def _get_track_row(track_id: str, *, track_name: str | None = None, artists: str
     return row
 
 
-def _get_scatter_genre_color(track_genre: str, filtered_df: pd.DataFrame, *, max_points: int = 500, topk_genres: int = 10):
-    if filtered_df is None or len(filtered_df) == 0:
-        return OTHER_COLOR
-
-    # Match scatter sampling logic so profile color aligns with legend colors.
-    if len(filtered_df) > max_points:
-        if "track_id" in filtered_df.columns:
-            work = filtered_df.copy()
-            hash_series = pd.util.hash_pandas_object(work["track_id"].astype(str), index=False)
-            plot_df = (
-                work.assign(_stable_hash=hash_series.values)
-                .sort_values("_stable_hash", kind="mergesort")
-                .head(max_points)
-                .drop(columns=["_stable_hash"])
-            )
-        else:
-            plot_df = filtered_df.sample(n=max_points, random_state=42)
-    else:
-        plot_df = filtered_df
-
-    top = plot_df["track_genre"].value_counts().head(topk_genres).index.tolist()
-    legend_order = top + ["Other"]
-    palette = BRIGHT_PALETTE[: len(legend_order) - 1] + [OTHER_COLOR]
-    color_map = {g: c for g, c in zip(legend_order, palette)}
-    return color_map.get(track_genre, color_map["Other"])
-
-
 def _build_genre_color_map(top_genres):
     top = [str(g) for g in (top_genres or [])]
     legend_order = top + ["Other"]
@@ -569,6 +542,17 @@ def _build_pool_from_ids(pool_ids):
     if isinstance(rows, pd.Series):
         return rows.to_frame().T
     return rows
+
+
+@lru_cache(maxsize=128)
+def _pool_track_ids_from_selected_index_cached(selected_index_tuple):
+    if not selected_index_tuple:
+        return tuple()
+    idx = [int(i) for i in selected_index_tuple]
+    if len(idx) == 0:
+        return tuple()
+    track_ids = data.loc[idx, "track_id"].astype(str)
+    return tuple(pd.unique(track_ids))
 
 
 def _compute_similar_records_from_pool(pool_df, track_id_str):
@@ -1387,17 +1371,17 @@ def render_compare_button(compare_mode):
 @callback(
     Output("song-profile-container", "children"),
     Input("selected-track-store", "data"),
-    Input("liked-tracks-store", "data"),
     Input("scatter-genre-color-map-store", "data"),
     Input("compare-mode-store", "data"),
     Input("locked-track-store", "data"),
+    State("liked-tracks-store", "data"),
 )
 def render_song_profile(
     selected_track,
-    liked_tracks,
     genre_color_map,
     compare_mode,
     locked_track,
+    liked_tracks,
 ):
     selected_id = str((selected_track or {}).get("track_id", "")).strip()
     locked_id = str((locked_track or {}).get("track_id", "")).strip()
@@ -1425,7 +1409,6 @@ def render_song_profile(
 
     compare_row = None
     compare_genre_color = None
-    compare_id = None
     if compare_on and selected_id and selected_id != track_id:
         compare_row_index = (selected_track or {}).get("row_index")
         compare_row = _get_track_row_by_index(compare_row_index)
@@ -1437,7 +1420,6 @@ def render_song_profile(
                 track_genre=(selected_track or {}).get("track_genre"),
             )
         if compare_row is not None:
-            compare_id = selected_id
             compare_genre_color = _color_for_genre(str(compare_row.get("track_genre", "")), genre_color_map)
 
     values = [float(row.get(c, 0) if pd.notna(row.get(c, np.nan)) else 0.0) for c in PROFILE_AXES]
@@ -1620,6 +1602,38 @@ def render_song_profile(
 
 
 @callback(
+    Output({"type": "profile-like", "track_id": ALL}, "children"),
+    Output({"type": "profile-like", "track_id": ALL}, "style"),
+    Input("liked-tracks-store", "data"),
+    State({"type": "profile-like", "track_id": ALL}, "id"),
+)
+def sync_profile_like_button(liked_tracks, profile_like_ids):
+    ids = list(profile_like_ids or [])
+    if not ids:
+        return [], []
+
+    liked_set = {str(x) for x in (liked_tracks or [])}
+    children = []
+    styles = []
+    for item in ids:
+        tid = str((item or {}).get("track_id", "")).strip()
+        is_liked = tid in liked_set
+        children.append("★" if is_liked else "☆")
+        styles.append(
+            {
+                "border": "none",
+                "background": "transparent",
+                "cursor": "pointer",
+                "fontSize": "20px",
+                "lineHeight": "1",
+                "padding": 0,
+                "color": "#f4b400" if is_liked else "#bcc3cc",
+            }
+        )
+    return children, styles
+
+
+@callback(
     Output("similar-track-dropdown", "value", allow_duplicate=True),
     Input("profile-show-similar-btn", "n_clicks"),
     State("selected-track-store", "data"),
@@ -1716,7 +1730,7 @@ def update_similar_dropdown(selected_index_data, search_value, current_value):
     Output("similar-tracks-container", "children"),
     Input("similar-track-dropdown", "value"),
     State("selected-index-store", "data"),
-    State("liked-tracks-store", "data"),
+    Input("liked-tracks-store", "data"),
 )
 def update_similar_tracks(track_id, selected_index_data, liked_tracks):
     if not track_id:
@@ -1725,19 +1739,24 @@ def update_similar_tracks(track_id, selected_index_data, liked_tracks):
             style={"fontSize": "12px", "color": "#aaa", "padding": "8px 0", "lineHeight": "1.5"},
         )
 
-    pool = _df_from_filtered_index(selected_index_data)
-    if pool is None or len(pool) == 0:
+    selected_index_tuple = tuple(int(i) for i in (selected_index_data or []))
+    if not selected_index_tuple:
         return html.Div("Reference track is not in current selection.", style={"fontSize": "12px", "color": "#c00"})
 
     track_id_str = str(track_id).strip()
     if not track_id_str:
         return html.Div("Track not found.", style={"fontSize": "12px", "color": "#c00"})
 
-    pool_ids = tuple(pool["track_id"].astype(str).drop_duplicates().tolist())
-    # Cache similarity ranking for common interactive pool sizes.
-    if len(pool_ids) <= 5000:
+    # Cache pool track-id extraction and similarity ranking for common interactive pool sizes.
+    if len(selected_index_tuple) <= 5000:
+        pool_ids = _pool_track_ids_from_selected_index_cached(selected_index_tuple)
+        if not pool_ids:
+            return html.Div("Reference track is not in current selection.", style={"fontSize": "12px", "color": "#c00"})
         sim_out = _compute_similar_records_cached(track_id_str, pool_ids)
     else:
+        pool = _df_from_filtered_index(selected_index_tuple)
+        if pool is None or len(pool) == 0:
+            return html.Div("Reference track is not in current selection.", style={"fontSize": "12px", "color": "#c00"})
         sim_out = _compute_similar_records_from_pool(pool, track_id_str)
 
     if sim_out.get("status") == "missing":
