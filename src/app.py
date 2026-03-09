@@ -78,6 +78,10 @@ NORM_FEATURES = [f"_n_{c}" for c in AUDIO_FEATURES]
 for c in AUDIO_FEATURES:
     data[f"_n_{c}"] = pd.to_numeric(data_norm[c], errors="coerce").astype("float32")
 
+# Rebuild after normalized feature columns are added so similarity-cache pool
+# lookups always include required _n_* fields.
+_track_id_idx = data.set_index("track_id", drop=False, verify_integrity=False)
+
 TEMPO_MIN, TEMPO_MAX = 0, 250
 POP_MIN, POP_MAX = 0, 100
 GENRES_BY_POPULARITY = (
