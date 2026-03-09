@@ -73,9 +73,9 @@ View the dashboard sketch here:
 
 [Dashboard sketch PDF](./doc/milestone1/dashboard-sketch.pdf)  
 
-### Dashboard Overview (Milestone 2)
+### Dashboard Overview (Milestone 4)
 
-![Dashboard Overview](./doc/milestone2/Dashboard_Overview.png)
+![Dashboard Overview](./doc/milestone4/overview.png)
 
 ## Run Locally
 
@@ -97,10 +97,12 @@ DATA-551-GROUP-7/
 |   |   |-- dashboard-sketch.pdf
 |   |   |-- DATA 551-Group-7-Proposal.pdf
 |   |   `-- MILESTONE1_CHECKLIST.md
-|   `-- milestone2/
+|   |-- milestone2/
 |       |-- Dashboard_Overview.png
 |       |-- MILESTONE2_CHECKLIST.md
 |       `-- reflection-milestone2.md
+|   `-- milestone4/
+|       `-- overview.png
 |-- reports/
 |   `-- Milestone 2.ipynb
 |-- src/
