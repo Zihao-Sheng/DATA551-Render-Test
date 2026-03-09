@@ -4,7 +4,14 @@ An interactive dashboard for exploring how audio features, genres, and moods rel
 
 ## Deployed App
 
-Public app URL: **https://data-551-group-7-dashboard-milestone-2.onrender.com/**
+Public app URL: **https://data-551-group-7-dashboard-milestone-2.onrender.com/**  
+(Update this link if your final deployment URL changes.)
+
+## Dashboard Keywords (Plots, Widgets, Interactions)
+
+- Plots: interactive scatterplot, top-genre bar chart, average audio profile bar chart, feature density chart, popularity histogram, tempo distribution histogram, mood heatmap (5x5)
+- Widgets: search input, genre dropdown + chips, radio buttons, checklist, range sliders, tab switch, dropdown selector, like/favorite stars
+- Interactions: brush selection, click-to-open track profile, similar-track discovery, compare mode, pop-up insight cards, filter drawer toggle, local liked-track persistence
 
 ## DATA 551 – Group 7
 - Jingtao Yang  
@@ -54,13 +61,11 @@ Steps:
 
 ## App Description & Sketch
 
-The Spotify Track Insights Explorer is designed around multiple coordinated views. On the left, a control panel lets users filter the catalogue by track genre (multi-select), explicit flag, tempo band, and popularity tier. A search box allows quick filtering by track name, artist, or album, which is useful when working with large selections.
+The Spotify Track Insights Explorer uses coordinated views for drill-down from global pattern discovery to track-level decisions. The center panel focuses on an Energy vs Valence scatterplot (genre-colored, popularity-sized) with brushing for sub-selection. The right panel contains Track Profile and Discover Similar Tracks, supporting click-through exploration and low-popularity recommendation.
 
-The main view is an overview scatterplot of tracks, with energy on the x-axis and valence on the y-axis. Points are coloured by genre and sized by popularity, giving a high-level picture of where different genres and moods sit in audio space. Users can brush over a region of the scatterplot to focus on a particular mood.
+The filter panel supports search, genre add/remove chips, explicit/clean toggles, liked-only filtering, tempo and popularity ranges, and a one-click reset. Users can like tracks from the table/profile/similar list and keep those likes in local browser storage.
 
-When filters or brushing are applied, other panels update to summarize the selected subset. A genre summary view shows bar charts of average popularity and danceability by genre. A feature distribution panel (histograms or density plots) displays how tempo, loudness, and duration are distributed for the current selection. A track list table at the bottom presents the selected tracks with sortable columns (track name, artist, genre, popularity, and key audio features).
-
-Clicking on a specific popular track opens a side panel that highlights audio-similar tracks with lower popularity tiers. This helps playlist editors discover fresh candidates that fit a desired sound while diversifying their playlists. Overall, the app supports a workflow from high-level pattern discovery (which genres dominate a mood region) down to concrete track-level decisions (which songs to add next).
+An insight card system provides focused summaries on demand: Top Genres, Feature Density, Avg Audio Profile, Popularity Histogram, Tempo Distribution, and Mood Heatmap (5x5). This keeps the interface compact while still exposing multiple analytical views when needed.
 
 ### Dashboard Sketch
 
@@ -102,9 +107,11 @@ DATA-551-GROUP-7/
 |   |-- charts/
 |   |   |-- distribution.py
 |   |   |-- genre_bar.py
+|   |   |-- mood_quadrant.py
 |   |   |-- profile.py
 |   |   |-- scatter.py
-|   |   `-- song_list.py
+|   |   |-- song_list.py
+|   |   `-- tempo_dist.py
 |   |-- app.py
 |   |-- filter.py
 |   `-- __init__.py

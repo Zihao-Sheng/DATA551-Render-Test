@@ -95,6 +95,7 @@ GENRE_OPTIONS = [{"label": g, "value": g} for g in GENRES_BY_POPULARITY]
 
 app = Dash(
     __name__,
+    title="Spotify Track Insights Explorer",
     suppress_callback_exceptions=True,
     assets_folder=str(ROOT / "assets"),
     meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}],
