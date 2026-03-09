@@ -17,6 +17,8 @@ from charts.scatter import make_scatter, BRIGHT_PALETTE, OTHER_COLOR
 from charts.genre_bar import make_genre_bar
 from charts.distribution import make_distribution
 from charts.profile import make_audio_profile
+from charts.tempo_dist import make_tempo_distribution
+from charts.mood_quadrant import make_mood_quadrant
 from charts.song_list import make_song_list_table
 from filter import filter_tracks
 
@@ -121,7 +123,7 @@ SECTION_TITLE = {
     "letterSpacing": "-0.2px",
 }
 FILTER_LABEL = {
-    "fontSize": "9px",
+    "fontSize": "10px",
     "fontWeight": "600",
     "color": "#888",
     "textTransform": "uppercase",
@@ -135,7 +137,7 @@ INPUT_STYLE = {
     "borderRadius": "8px",
     "border": "1px solid #e2e5ea",
     "outline": "none",
-    "fontSize": "11px",
+    "fontSize": "12px",
     "boxSizing": "border-box",
 }
 BADGE = {
@@ -535,6 +537,10 @@ def _df_from_filtered_index(filtered_index_data):
     return data.loc[idx]
 
 
+def _selected_index_key(selected_index_data):
+    return tuple(int(i) for i in (selected_index_data or []))
+
+
 def _build_pool_from_ids(pool_ids):
     if not pool_ids:
         return data.iloc[0:0]
@@ -615,6 +621,91 @@ def _compute_similar_records_cached(track_id_str, pool_ids_tuple):
     pool_df = _build_pool_from_ids(pool_ids_tuple)
     return _compute_similar_records_from_pool(pool_df, track_id_str)
 
+
+@lru_cache(maxsize=96)
+def _genre_bar_spec_cached(selected_index_key):
+    df = _df_from_filtered_index(selected_index_key)
+    return make_genre_bar(df, top_n=10, width=290, height=320, swap_axes=True).to_dict()
+
+
+@lru_cache(maxsize=96)
+def _distribution_spec_cached(selected_index_key):
+    df = _df_from_filtered_index(selected_index_key)
+    # Heavier chart on Render: use lower sampling cap for smoother first paint/interactions.
+    return make_distribution(df, max_points=1200, width=290, height=300, swap_axes=False).to_dict()
+
+
+@lru_cache(maxsize=96)
+def _audio_profile_spec_cached(selected_index_key):
+    df = _df_from_filtered_index(selected_index_key)
+    return make_audio_profile(df, width=290, height=320, swap_axes=True).to_dict()
+
+
+@lru_cache(maxsize=96)
+def _tempo_distribution_spec_cached(selected_index_key):
+    df = _df_from_filtered_index(selected_index_key)
+    return make_tempo_distribution(df, width=290, height=240).to_dict()
+
+
+@lru_cache(maxsize=96)
+def _mood_quadrant_spec_cached(selected_index_key):
+    df = _df_from_filtered_index(selected_index_key)
+    return make_mood_quadrant(df, width=290, height=250).to_dict()
+
+
+@lru_cache(maxsize=96)
+def _popularity_hist_spec_cached(selected_index_key):
+    df = _df_from_filtered_index(selected_index_key)
+    if df is None or len(df) == 0 or "popularity" not in df.columns:
+        chart = (
+            alt.Chart(pd.DataFrame({"label": ["No data"], "value": [1]}))
+            .mark_text(fontSize=12, color="#8898a9")
+            .encode(text="label:N")
+            .properties(width=290, height=220)
+        )
+        return chart.to_dict()
+
+    work = df[["popularity"]].copy()
+    work["popularity"] = pd.to_numeric(work["popularity"], errors="coerce").clip(0, 100)
+    work = work.dropna()
+    if work.empty:
+        chart = (
+            alt.Chart(pd.DataFrame({"label": ["No data"], "value": [1]}))
+            .mark_text(fontSize=12, color="#8898a9")
+            .encode(text="label:N")
+            .properties(width=290, height=220)
+        )
+        return chart.to_dict()
+
+    chart = (
+        alt.Chart(work)
+        .mark_bar(
+            cornerRadiusTopLeft=4,
+            cornerRadiusTopRight=4,
+            color="#7CBF8E",
+            opacity=0.9,
+            stroke="#ffffff",
+            strokeWidth=0.6,
+        )
+        .encode(
+            x=alt.X(
+                "popularity:Q",
+                bin=alt.Bin(maxbins=16),
+                title="Popularity",
+                scale=alt.Scale(domain=[0, 100]),
+                axis=alt.Axis(grid=False),
+            ),
+            y=alt.Y("count():Q", title="Track Count", axis=alt.Axis(grid=True, gridOpacity=0.2)),
+            tooltip=[
+                alt.Tooltip("count():Q", title="Tracks"),
+            ],
+        )
+        .properties(width=290, height=240)
+        .configure_view(stroke=None)
+        .configure_axis(labelFontSize=10, titleFontSize=11, gridOpacity=0.2)
+    )
+    return chart.to_dict()
+
 app.layout = html.Div(
     className="page",
     style=PAGE,
@@ -683,7 +774,35 @@ app.layout = html.Div(
                     className="left-panel",
                     style={**CARD, "marginBottom": 0},
                     children=[
-                        html.Div("Filters", style={**SECTION_TITLE, "color": TITLE_GREEN}),
+                        html.Button(
+                            "›",
+                            id="filter-toggle-btn",
+                            n_clicks=0,
+                            title="Expand filters",
+                            className="filter-toggle-btn",
+                        ),
+                        html.Div(
+                            style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "8px"},
+                            children=[
+                                html.Div("Filters", style={**SECTION_TITLE, "color": TITLE_GREEN, "marginBottom": 0}),
+                                html.Button(
+                                    "Reset All",
+                                    id="reset-all-btn",
+                                    n_clicks=0,
+                                    style={
+                                        "border": "1px solid #dbe5df",
+                                        "backgroundColor": "#f7f9f8",
+                                        "color": "#60756a",
+                                        "fontSize": "10px",
+                                        "fontWeight": "600",
+                                        "padding": "4px 8px",
+                                        "borderRadius": "8px",
+                                        "cursor": "pointer",
+                                        "whiteSpace": "nowrap",
+                                    },
+                                ),
+                            ],
+                        ),
 
                         html.Div("Search Tracks", style=FILTER_LABEL),
                         dcc.Input(
@@ -702,7 +821,7 @@ app.layout = html.Div(
                             placeholder="Search & add a genre…",
                             clearable=True,
                             searchable=True,
-                            style={"fontSize": "11px"},
+                            style={"fontSize": "12px"},
                         ),
                         html.Div(
                             id="selected-genres-box",
@@ -726,7 +845,7 @@ app.layout = html.Div(
                             ],
                             value="all",
                             style={"rowGap": "5px", "display": "grid"},
-                            labelStyle={"display": "flex", "alignItems": "center", "gap": "7px", "fontSize": "12px"},
+                            labelStyle={"display": "flex", "alignItems": "center", "gap": "7px", "fontSize": "13px"},
                             inputStyle={"accentColor": GREEN},
                         ),
 
@@ -736,7 +855,7 @@ app.layout = html.Div(
                             options=[{"label": " Liked only", "value": "liked"}],
                             value=[],
                             style={"rowGap": "5px", "display": "grid"},
-                            labelStyle={"display": "flex", "alignItems": "center", "gap": "7px", "fontSize": "12px"},
+                            labelStyle={"display": "flex", "alignItems": "center", "gap": "7px", "fontSize": "13px"},
                             inputStyle={"accentColor": GREEN},
                         ),
 
@@ -760,7 +879,7 @@ app.layout = html.Div(
 
                         html.Div(
                             id="filter-hint",
-                            style={"fontSize": "11px", "color": "#888", "marginTop": "12px",
+                            style={"fontSize": "12px", "color": "#888", "marginTop": "12px",
                                    "padding": "8px 10px", "backgroundColor": "#f8f9fa",
                                    "borderRadius": "10px", "lineHeight": "1.6"},
                         ),
@@ -772,105 +891,360 @@ app.layout = html.Div(
                     className="main-panel",
                     style={"minWidth": 0},
                     children=[
-                        html.Div(
-                            style=CARD,
+                        dcc.Tabs(
+                            id="main-view-tabs",
+                            value="insights",
+                            style={"marginBottom": "6px"},
                             children=[
-                                html.Div(
-                                    style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start"},
-                                    children=[
-                                        html.Div([
-                                            html.H4("Energy vs Valence", style=SECTION_TITLE),
-                                            html.Div(id="scatter-meta", style={"fontSize": "10px", "color": "#888", "marginBottom": "5px"}),
-                                        ]),
-                                        dcc.RadioItems(
-                                            id="toolbox-mode",
-                                            options=[
-                                                {"label": " Brush", "value": "brush"},
-                                                {"label": " Pan/Zoom", "value": "pan"},
+                                dcc.Tab(
+                                    label="Insights",
+                                    value="insights",
+                                    style={"fontSize": "11px", "padding": "6px 10px", "borderColor": "#d7e7dd"},
+                                    selected_style={
+                                        "fontSize": "11px",
+                                        "padding": "6px 10px",
+                                        "borderColor": "#d7e7dd",
+                                        "backgroundColor": "#eef8f1",
+                                        "color": "#2d6a4f",
+                                        "fontWeight": "700",
+                                    },
+                                    children=html.Div(
+                                        id="insights-pane",
+                                        className="main-tab-pane",
+                                        children=[
+                                            html.Div(
+                                                id="scatter-card",
+                                                style={
+                                                    **CARD,
+                                                    "marginBottom": 0,
+                                                    "height": "calc(var(--left-panel-h, var(--viewport-h, 0px)) - var(--insights-top-offset, 106px))",
+                                                    "minHeight": "0",
+                                                },
+                                                children=[
+                                                    html.Div(
+                                                        style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start"},
+                                                        children=[
+                                                            html.Div([
+                                                                html.H4("Energy vs Valence", style=SECTION_TITLE),
+                                                                html.Div(id="scatter-meta", style={"fontSize": "10px", "color": "#888", "marginBottom": "5px"}),
+                                                                html.Div(
+                                                                    "Tip: click one point to open profile; brush an area to define selected tracks.",
+                                                                    style={"fontSize": "9px", "color": "#8a98a6", "marginBottom": "4px"},
+                                                                ),
+                                                            ]),
+                                                            dcc.RadioItems(
+                                                                id="toolbox-mode",
+                                                                options=[
+                                                                    {"label": " Brush", "value": "brush"},
+                                                                    {"label": " Pan/Zoom", "value": "pan"},
+                                                                ],
+                                                                value="brush",
+                                                                inline=True,
+                                                                style={"fontSize": "10px", "color": "#555"},
+                                                                labelStyle={"marginLeft": "10px", "cursor": "pointer"},
+                                                                inputStyle={"accentColor": GREEN},
+                                                            ),
+                                                        ],
+                                                    ),
+                                                    html.Div(
+                                                        style={"display": "flex", "gap": "8px", "marginTop": "8px", "flexWrap": "wrap"},
+                                                        children=[
+                                                            html.Button(
+                                                                "Top Genres",
+                                                                id="show-genre-card-btn",
+                                                                n_clicks=0,
+                                                                className="insights-detail-btn",
+                                                                style={
+                                                                    "border": "1px solid #2f7f58",
+                                                                    "backgroundColor": "#2f7f58",
+                                                                    "color": "#ffffff",
+                                                                    "fontSize": "11px",
+                                                                    "fontWeight": "700",
+                                                                    "padding": "6px 11px",
+                                                                    "borderRadius": "10px",
+                                                                    "cursor": "pointer",
+                                                                    "boxShadow": "0 2px 8px rgba(47, 127, 88, 0.28)",
+                                                                },
+                                                            ),
+                                                            html.Button(
+                                                                "Feature Density",
+                                                                id="show-density-card-btn",
+                                                                n_clicks=0,
+                                                                className="insights-detail-btn",
+                                                                style={
+                                                                    "border": "1px solid #2f7f58",
+                                                                    "backgroundColor": "#2f7f58",
+                                                                    "color": "#ffffff",
+                                                                    "fontSize": "11px",
+                                                                    "fontWeight": "700",
+                                                                    "padding": "6px 11px",
+                                                                    "borderRadius": "10px",
+                                                                    "cursor": "pointer",
+                                                                    "boxShadow": "0 2px 8px rgba(47, 127, 88, 0.28)",
+                                                                },
+                                                            ),
+                                                            html.Button(
+                                                                "Avg Audio Profile",
+                                                                id="show-audio-card-btn",
+                                                                n_clicks=0,
+                                                                className="insights-detail-btn",
+                                                                style={
+                                                                    "border": "1px solid #2f7f58",
+                                                                    "backgroundColor": "#2f7f58",
+                                                                    "color": "#ffffff",
+                                                                    "fontSize": "11px",
+                                                                    "fontWeight": "700",
+                                                                    "padding": "6px 11px",
+                                                                    "borderRadius": "10px",
+                                                                    "cursor": "pointer",
+                                                                    "boxShadow": "0 2px 8px rgba(47, 127, 88, 0.28)",
+                                                                },
+                                                            ),
+                                                            html.Button(
+                                                                "Popularity Histogram",
+                                                                id="show-pop-hist-card-btn",
+                                                                n_clicks=0,
+                                                                className="insights-detail-btn",
+                                                                style={
+                                                                    "border": "1px solid #2f7f58",
+                                                                    "backgroundColor": "#2f7f58",
+                                                                    "color": "#ffffff",
+                                                                    "fontSize": "11px",
+                                                                    "fontWeight": "700",
+                                                                    "padding": "6px 11px",
+                                                                    "borderRadius": "10px",
+                                                                    "cursor": "pointer",
+                                                                    "boxShadow": "0 2px 8px rgba(47, 127, 88, 0.28)",
+                                                                },
+                                                            ),
+                                                            html.Button(
+                                                                "Tempo Distribution",
+                                                                id="show-genre-mix-card-btn",
+                                                                n_clicks=0,
+                                                                className="insights-detail-btn",
+                                                                style={
+                                                                    "border": "1px solid #2f7f58",
+                                                                    "backgroundColor": "#2f7f58",
+                                                                    "color": "#ffffff",
+                                                                    "fontSize": "11px",
+                                                                    "fontWeight": "700",
+                                                                    "padding": "6px 11px",
+                                                                    "borderRadius": "10px",
+                                                                    "cursor": "pointer",
+                                                                    "boxShadow": "0 2px 8px rgba(47, 127, 88, 0.28)",
+                                                                },
+                                                            ),
+                                                            html.Button(
+                                                                "Mood Quadrant",
+                                                                id="show-delta-card-btn",
+                                                                n_clicks=0,
+                                                                className="insights-detail-btn",
+                                                                style={
+                                                                    "border": "1px solid #2f7f58",
+                                                                    "backgroundColor": "#2f7f58",
+                                                                    "color": "#ffffff",
+                                                                    "fontSize": "11px",
+                                                                    "fontWeight": "700",
+                                                                    "padding": "6px 11px",
+                                                                    "borderRadius": "10px",
+                                                                    "cursor": "pointer",
+                                                                    "boxShadow": "0 2px 8px rgba(47, 127, 88, 0.28)",
+                                                                },
+                                                            ),
+                                                        ],
+                                                    ),
+                                                    html.Div(
+                                                        style={
+                                                            "display": "grid",
+                                                            "gridTemplateColumns": "30% 70%",
+                                                            "gap": "10px",
+                                                            "alignItems": "end",
+                                                            "minHeight": "510px",
+                                                            "marginTop": "6px",
+                                                        },
+                                                        children=[
+                                                            html.Div(
+                                                                id="insights-popup-column",
+                                                                style={
+                                                                    "minHeight": "420px",
+                                                                    "display": "flex",
+                                                                    "alignItems": "flex-start",
+                                                                    "alignSelf": "start",
+                                                                    "paddingTop": "10px",
+                                                                },
+                                                                children=[
+                                                                    html.Div(
+                                                                        id="insights-genre-card",
+                                                                        style={**CARD, "marginBottom": 0, "minWidth": 0, "display": "none", "width": "100%"},
+                                                                        children=[
+                                                                            html.H4("Top Genres by Popularity", style=SECTION_TITLE),
+                                                                            html.Div(
+                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                children="Top genres ranked by mean popularity; color indicates mean energy.",
+                                                                            ),
+                                                                            dvc.Vega(
+                                                                                id="genre-bar",
+                                                                                spec={},
+                                                                                opt={"renderer": "svg", "actions": False},
+                                                                                style={"width": "100%", "maxWidth": "100%", "minWidth": 0, "overflow": "hidden"},
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                    html.Div(
+                                                                        id="insights-audio-card",
+                                                                        style={**CARD, "marginBottom": 0, "minWidth": 0, "display": "none", "width": "100%"},
+                                                                        children=[
+                                                                            html.H4("Avg Audio Profile", style=SECTION_TITLE),
+                                                                            html.Div(
+                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                children="Mean values of key audio features for the current selection.",
+                                                                            ),
+                                                                            dvc.Vega(
+                                                                                id="audio-profile",
+                                                                                spec={},
+                                                                                opt={"renderer": "svg", "actions": False},
+                                                                                style={"width": "100%", "maxWidth": "100%", "minWidth": 0, "overflow": "hidden"},
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                    html.Div(
+                                                                        id="insights-density-card",
+                                                                        style={**CARD, "display": "none", "width": "100%"},
+                                                                        children=[
+                                                                            html.H4("Feature Density — Selected Tracks", style=SECTION_TITLE),
+                                                                            html.Div(
+                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                children="Overlaid density curves of key audio features in the selection.",
+                                                                            ),
+                                                                            html.Div(
+                                                                                dvc.Vega(
+                                                                                    id="distribution",
+                                                                                    spec={},
+                                                                                    opt={"renderer": "svg", "actions": False},
+                                                                                    style={"width": "100%", "maxWidth": "100%"},
+                                                                                ),
+                                                                                style={"display": "flex", "justifyContent": "center"},
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                    html.Div(
+                                                                        id="insights-genre-mix-card",
+                                                                        style={**CARD, "display": "none", "width": "100%"},
+                                                                        children=[
+                                                                            html.H4("Tempo Distribution", style=SECTION_TITLE),
+                                                                            html.Div(
+                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                children="Tempo (BPM) distribution for selected tracks, with median reference line.",
+                                                                            ),
+                                                                            dvc.Vega(
+                                                                                id="tempo-dist",
+                                                                                spec={},
+                                                                                opt={"renderer": "svg", "actions": False},
+                                                                                style={"width": "100%", "maxWidth": "100%", "minWidth": 0, "overflow": "hidden"},
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                    html.Div(
+                                                                        id="insights-pop-hist-card",
+                                                                        style={**CARD, "display": "none", "width": "100%"},
+                                                                        children=[
+                                                                            html.H4("Popularity Histogram", style=SECTION_TITLE),
+                                                                            html.Div(
+                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                children="Histogram of popularity scores (0-100) for the current selection.",
+                                                                            ),
+                                                                            dvc.Vega(
+                                                                                id="pop-hist",
+                                                                                spec={},
+                                                                                opt={"renderer": "svg", "actions": False},
+                                                                                style={"width": "100%", "maxWidth": "100%", "minWidth": 0, "overflow": "hidden"},
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                    html.Div(
+                                                                        id="insights-delta-card",
+                                                                        style={**CARD, "display": "none", "width": "100%"},
+                                                                        children=[
+                                                                            html.H4("Mood Quadrant", style=SECTION_TITLE),
+                                                                            html.Div(
+                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                children="5x5 energy-valence heatmap showing mood concentration across the selection.",
+                                                                            ),
+                                                                            dvc.Vega(
+                                                                                id="mood-quad",
+                                                                                spec={},
+                                                                                opt={"renderer": "svg", "actions": False},
+                                                                                style={"width": "100%", "maxWidth": "100%", "minWidth": 0, "overflow": "hidden"},
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                ],
+                                                            ),
+                                                            html.Div(
+                                                                dvc.Vega(
+                                                                    id="scatter",
+                                                                    spec={},
+                                                                    opt={"renderer": "svg", "actions": False},
+                                                                    signalsToObserve=[
+                                                                        "brush_selection",
+                                                                        "track_pick",
+                                                                        "track_pick_tuple",
+                                                                        "track_pick_toggle",
+                                                                        "track_pick_modify",
+                                                                        "track_pick_store",
+                                                                    ],
+                                                                    style={"width": "auto", "maxWidth": "100%", "display": "inline-block"},
+                                                                ),
+                                                                style={
+                                                                    "display": "flex",
+                                                                    "justifyContent": "flex-end",
+                                                                    "alignItems": "flex-end",
+                                                                    "width": "100%",
+                                                                    "minHeight": "510px",
+                                                                    "paddingBottom": "10px",
+                                                                },
+                                                            ),
+                                                        ],
+                                                    ),
                                             ],
-                                            value="brush",
-                                            inline=True,
-                                            style={"fontSize": "10px", "color": "#555"},
-                                            labelStyle={"marginLeft": "10px", "cursor": "pointer"},
-                                            inputStyle={"accentColor": GREEN},
                                         ),
-                                    ],
-                                ),
-                                dvc.Vega(
-                                    id="scatter",
-                                    spec={},
-                                    opt={"renderer": "svg", "actions": False},
-                                    signalsToObserve=[
-                                        "brush_selection",
-                                        "track_pick",
-                                        "track_pick_tuple",
-                                        "track_pick_toggle",
-                                        "track_pick_modify",
-                                        "track_pick_store",
-                                    ],
-                                    style={"width": "100%"},
-                                ),
-                            ],
-                        ),
-
-                        html.Div(
-                            className="two-up",
-                            children=[
-                                html.Div(
-                                    style={**CARD, "marginBottom": 0, "minWidth": 0},
-                                    children=[
-                                        html.H4("Top Genres by Popularity", style=SECTION_TITLE),
-                                        html.Div(
-                                            style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
-                                            children="Average popularity by genre, colored by mean energy.",
-                                        ),
-                                        dvc.Vega(
-                                            id="genre-bar",
-                                            spec={},
-                                            opt={"renderer": "svg", "actions": False},
-                                            style={"width": "100%", "maxWidth": "100%", "minWidth": 0, "overflow": "hidden"},
-                                        ),
-                                    ],
-                                ),
-                                html.Div(
-                                    style={**CARD, "marginBottom": 0, "minWidth": 0},
-                                    children=[
-                                        html.H4("Avg Audio Profile", style=SECTION_TITLE),
-                                        html.Div(
-                                            style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
-                                            children="Mean values for selected / filtered tracks.",
-                                        ),
-                                        dvc.Vega(
-                                            id="audio-profile",
-                                            spec={},
-                                            opt={"renderer": "svg", "actions": False},
-                                            style={"width": "100%", "maxWidth": "100%", "minWidth": 0, "overflow": "hidden"},
-                                        ),
-                                    ],
-                                ),
-                            ],
-                        ),
-
-                        html.Div(
-                            style=CARD,
-                            children=[
-                                html.H4("Feature Density — Selected Tracks", style=SECTION_TITLE),
-                                html.Div(
-                                    style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
-                                    children="Distribution of key audio features for the current selection.",
-                                ),
-                                html.Div(
-                                    dvc.Vega(
-                                        id="distribution",
-                                        spec={},
-                                        opt={"renderer": "svg", "actions": False},
-                                        style={"width": "100%", "maxWidth": "100%"},
+                                        ],
                                     ),
-                                    style={"display": "flex", "justifyContent": "center"},
+                                ),
+                                dcc.Tab(
+                                    label="Track List",
+                                    value="tracklist",
+                                    style={"fontSize": "11px", "padding": "6px 10px", "borderColor": "#d7e7dd"},
+                                    selected_style={
+                                        "fontSize": "11px",
+                                        "padding": "6px 10px",
+                                        "borderColor": "#d7e7dd",
+                                        "backgroundColor": "#eef8f1",
+                                        "color": "#2d6a4f",
+                                        "fontWeight": "700",
+                                    },
+                                    children=html.Div(
+                                        id="tracklist-pane",
+                                        className="main-tab-pane",
+                                        children=[
+                                            html.Div(
+                                                style={**CARD, "minWidth": 0, "marginBottom": 0, "marginTop": "4px", "padding": "8px 10px"},
+                                                children=[
+                                                    html.Div(
+                                                        "Click the star before Title to like/unlike a track.",
+                                                        style={"fontSize": "9px", "color": "#888", "marginBottom": "4px"},
+                                                    ),
+                                                    html.Div(
+                                                        id="song-list-container",
+                                                        children=make_song_list_table(data.head(0), max_rows=0, liked_track_ids=[]),
+                                                    ),
+                                                ],
+                                            ),
+                                        ],
+                                    ),
                                 ),
                             ],
                         ),
-
                     ],
                 ),
 
@@ -935,22 +1309,6 @@ app.layout = html.Div(
                         ),
                     ],
                 ),
-
-                html.Div(
-                    className="bottom-panel",
-                    style={**CARD, "minWidth": 0, "marginBottom": 0},
-                    children=[
-                        html.H4("Track List", style=SECTION_TITLE),
-                        html.Div(
-                            "Click the star before Title to like/unlike a track.",
-                            style={"fontSize": "9px", "color": "#888", "marginBottom": "5px"},
-                        ),
-                        html.Div(
-                            id="song-list-container",
-                            children=make_song_list_table(data.head(0), max_rows=0, liked_track_ids=[]),
-                        ),
-                    ],
-                ),
             ],
         ),
 
@@ -961,8 +1319,11 @@ app.layout = html.Div(
         dcc.Store(id="liked-tracks-store", data=[], storage_type="local"),
         dcc.Store(id="selected-track-store", data=None),
         dcc.Store(id="scatter-genre-color-map-store", data={}),
+        dcc.Store(id="filter-panel-open-store", data=False),
         dcc.Store(id="compare-mode-store", data=False),
         dcc.Store(id="locked-track-store", data=None),
+        dcc.Store(id="main-view-prev-store", data="insights"),
+        dcc.Store(id="insights-detail-store", data="density"),
     ],
 )
 
@@ -989,6 +1350,155 @@ def update_selected_genres_store(picked_genre, _remove_clicks, current_selected)
             selected.append(picked_genre)
 
     return selected, None
+
+
+@callback(
+    Output("filter-panel-open-store", "data"),
+    Input("filter-toggle-btn", "n_clicks"),
+    State("filter-panel-open-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_filter_panel(_n_clicks, is_open):
+    return not bool(is_open)
+
+
+@callback(
+    Output("left-panel", "className"),
+    Output("filter-toggle-btn", "children"),
+    Output("filter-toggle-btn", "title"),
+    Input("filter-panel-open-store", "data"),
+)
+def render_filter_panel_state(is_open):
+    if is_open:
+        return "left-panel open", "‹", "Collapse filters"
+    return "left-panel", "›", "Expand filters"
+
+
+@callback(
+    Output("keyword", "value", allow_duplicate=True),
+    Output("selected-genres-store", "data", allow_duplicate=True),
+    Output("genre-picker", "value", allow_duplicate=True),
+    Output("explicit", "value", allow_duplicate=True),
+    Output("liked-only", "value", allow_duplicate=True),
+    Output("tempo-range", "value", allow_duplicate=True),
+    Output("popularity-range", "value", allow_duplicate=True),
+    Output("toolbox-mode", "value", allow_duplicate=True),
+    Output("brush-bounds-store", "data", allow_duplicate=True),
+    Output("selected-track-store", "data", allow_duplicate=True),
+    Output("compare-mode-store", "data", allow_duplicate=True),
+    Output("locked-track-store", "data", allow_duplicate=True),
+    Output("similar-track-dropdown", "value", allow_duplicate=True),
+    Output("main-view-tabs", "value", allow_duplicate=True),
+    Output("insights-detail-store", "data", allow_duplicate=True),
+    Input("reset-all-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def reset_all_controls(n_clicks):
+    if not n_clicks:
+        return (
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+        )
+    return (
+        "",
+        [],
+        None,
+        "all",
+        [],
+        [TEMPO_MIN, TEMPO_MAX],
+        [POP_MIN, POP_MAX],
+        "brush",
+        None,
+        None,
+        False,
+        None,
+        None,
+        "insights",
+        None,
+    )
+
+
+@callback(
+    Output("insights-detail-store", "data"),
+    Input("show-genre-card-btn", "n_clicks"),
+    Input("show-audio-card-btn", "n_clicks"),
+    Input("show-density-card-btn", "n_clicks"),
+    Input("show-genre-mix-card-btn", "n_clicks"),
+    Input("show-pop-hist-card-btn", "n_clicks"),
+    Input("show-delta-card-btn", "n_clicks"),
+    State("insights-detail-store", "data"),
+    prevent_initial_call=True,
+)
+def choose_insights_detail(_genre_clicks, _audio_clicks, _density_clicks, _genre_mix_clicks, _pop_hist_clicks, _delta_clicks, current_value):
+    trig = ctx.triggered_id
+    mapping = {
+        "show-genre-card-btn": "genre",
+        "show-audio-card-btn": "audio",
+        "show-density-card-btn": "density",
+        "show-genre-mix-card-btn": "genre_mix",
+        "show-pop-hist-card-btn": "pop_hist",
+        "show-delta-card-btn": "delta",
+    }
+    picked = mapping.get(trig)
+    if not picked:
+        return no_update
+    return None if current_value == picked else picked
+
+
+@callback(
+    Output("insights-genre-card", "style"),
+    Output("insights-audio-card", "style"),
+    Output("insights-density-card", "style"),
+    Output("insights-genre-mix-card", "style"),
+    Output("insights-pop-hist-card", "style"),
+    Output("insights-delta-card", "style"),
+    Input("insights-detail-store", "data"),
+)
+def render_insights_detail_cards(active_detail):
+    popup_base = {
+        "width": "100%",
+        "boxShadow": "0 4px 14px rgba(0,0,0,0.12)",
+    }
+    hidden = {**popup_base, "display": "none"}
+    active_popup = {
+        **popup_base,
+        "animation": "insights-slit-pop 300ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "transformOrigin": "center top",
+    }
+    genre_style = hidden
+    audio_style = hidden
+    density_style = hidden
+    genre_mix_style = hidden
+    pop_hist_style = hidden
+    delta_style = hidden
+
+    if active_detail == "genre":
+        genre_style = {**CARD, "marginBottom": 0, "minWidth": 0, **active_popup}
+    elif active_detail == "audio":
+        audio_style = {**CARD, "marginBottom": 0, "minWidth": 0, **active_popup}
+    elif active_detail == "density":
+        density_style = {**CARD, **active_popup}
+    elif active_detail == "genre_mix":
+        genre_mix_style = {**CARD, **active_popup}
+    elif active_detail == "pop_hist":
+        pop_hist_style = {**CARD, **active_popup}
+    elif active_detail == "delta":
+        delta_style = {**CARD, **active_popup}
+
+    return genre_style, audio_style, density_style, genre_mix_style, pop_hist_style, delta_style
 
 
 @callback(
@@ -1151,15 +1661,16 @@ def update_scatter_and_stores(
         spec_out = no_update
         genre_color_map_out = no_update
     else:
+        scatter_max_points = 450 if n_filtered > 60000 else 500
         chart, scatter_meta = make_scatter(
             filtered_df,
             mode=mode,
-            max_points=500,
+            max_points=scatter_max_points,
             topk_genres=10,
             selection_name="brush_selection",
             point_selection_name="track_pick",
-            width=320,
-            height=320,
+            width=470,
+            height=470,
         )
         spec_out = chart.to_dict()
         genre_color_map_out = _build_genre_color_map(scatter_meta.get("top_genres", []))
@@ -1180,31 +1691,67 @@ def update_scatter_and_stores(
 @callback(
     Output("genre-bar", "spec"),
     Input("selected-index-store", "data"),
+    Input("insights-detail-store", "data"),
 )
-def update_genre_bar(selected_index_data):
-    df = _df_from_filtered_index(selected_index_data)
-    chart = make_genre_bar(df, top_n=10, width="container", height=255)
-    return chart.to_dict()
+def update_genre_bar(selected_index_data, _active_detail):
+    if _active_detail != "genre":
+        return no_update
+    return _genre_bar_spec_cached(_selected_index_key(selected_index_data))
 
 
 @callback(
     Output("distribution", "spec"),
     Input("selected-index-store", "data"),
+    Input("insights-detail-store", "data"),
 )
-def update_distribution(selected_index_data):
-    df = _df_from_filtered_index(selected_index_data)
-    chart = make_distribution(df, max_points=2000, width=420, height=220)
-    return chart.to_dict()
+def update_distribution(selected_index_data, _active_detail):
+    if _active_detail != "density":
+        return no_update
+    return _distribution_spec_cached(_selected_index_key(selected_index_data))
 
 
 @callback(
     Output("audio-profile", "spec"),
     Input("selected-index-store", "data"),
+    Input("insights-detail-store", "data"),
 )
-def update_audio_profile(selected_index_data):
-    df = _df_from_filtered_index(selected_index_data)
-    chart = make_audio_profile(df, width="container", height=255)
-    return chart.to_dict()
+def update_audio_profile(selected_index_data, _active_detail):
+    if _active_detail != "audio":
+        return no_update
+    return _audio_profile_spec_cached(_selected_index_key(selected_index_data))
+
+
+@callback(
+    Output("tempo-dist", "spec"),
+    Input("selected-index-store", "data"),
+    Input("insights-detail-store", "data"),
+)
+def update_tempo_distribution(selected_index_data, _active_detail):
+    if _active_detail != "genre_mix":
+        return no_update
+    return _tempo_distribution_spec_cached(_selected_index_key(selected_index_data))
+
+
+@callback(
+    Output("pop-hist", "spec"),
+    Input("selected-index-store", "data"),
+    Input("insights-detail-store", "data"),
+)
+def update_popularity_histogram(selected_index_data, _active_detail):
+    if _active_detail != "pop_hist":
+        return no_update
+    return _popularity_hist_spec_cached(_selected_index_key(selected_index_data))
+
+
+@callback(
+    Output("mood-quad", "spec"),
+    Input("selected-index-store", "data"),
+    Input("insights-detail-store", "data"),
+)
+def update_mood_quadrant(selected_index_data, _active_detail):
+    if _active_detail != "delta":
+        return no_update
+    return _mood_quadrant_spec_cached(_selected_index_key(selected_index_data))
 
 
 @callback(
@@ -1366,6 +1913,28 @@ def render_compare_button(compare_mode):
     if is_on:
         return "Compare: On", {**base, "backgroundColor": "#e9f7ef", "color": "#2d6a4f", "border": "1px solid #bfe4cd"}
     return "Compare: Off", {**base, "backgroundColor": "#f7f9f8", "color": "#60756a"}
+
+
+@callback(
+    Output("main-view-prev-store", "data"),
+    Output("insights-pane", "className"),
+    Output("tracklist-pane", "className"),
+    Input("main-view-tabs", "value"),
+    State("main-view-prev-store", "data"),
+)
+def animate_main_tabs(current_tab, prev_tab):
+    prev = str(prev_tab or "")
+    curr = str(current_tab or "")
+
+    insights_cls = "main-tab-pane"
+    tracklist_cls = "main-tab-pane"
+
+    if prev == "tracklist" and curr == "insights":
+        insights_cls = "main-tab-pane anim-enter-left"
+    elif prev == "insights" and curr == "tracklist":
+        tracklist_cls = "main-tab-pane anim-enter-right"
+
+    return curr or prev or "insights", insights_cls, tracklist_cls
 
 
 @callback(

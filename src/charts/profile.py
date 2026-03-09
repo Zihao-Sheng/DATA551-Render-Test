@@ -11,7 +11,7 @@ PALETTE = [
 ]
 
 
-def make_audio_profile(df: pd.DataFrame, *, width: int = 240, height: int = 260):
+def make_audio_profile(df: pd.DataFrame, *, width: int = 240, height: int = 260, swap_axes: bool = False):
     if df is None or len(df) == 0:
         return (
             alt.Chart(pd.DataFrame({"feature": [], "mean_value": []}))
@@ -25,50 +25,89 @@ def make_audio_profile(df: pd.DataFrame, *, width: int = 240, height: int = 260)
     means["feature"] = means["feature"].str.capitalize()
     feat_labels = [c.capitalize() for c in cols]
 
-    bars = (
-        alt.Chart(means)
-        .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
-        .encode(
-            x=alt.X(
-                "feature:N",
-                sort=feat_labels,
-                title=None,
-                axis=alt.Axis(
-                    labelFontSize=11,
-                    labelAngle=-25,
-                    labelLimit=80,
-                    labelAlign="right",
-                    labelBaseline="top",
-                    labelPadding=6,
+    if swap_axes:
+        bars = (
+            alt.Chart(means)
+            .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
+            .encode(
+                y=alt.Y(
+                    "feature:N",
+                    sort=feat_labels,
+                    title=None,
+                    axis=alt.Axis(labelFontSize=10, labelLimit=120, labelPadding=4),
                 ),
-            ),
-            y=alt.Y(
-                "mean_value:Q",
-                title="Mean (0-1)",
-                scale=alt.Scale(domain=[0, 1]),
-                axis=alt.Axis(grid=True, gridOpacity=0.2, labelFontSize=11),
-            ),
-            color=alt.Color(
-                "feature:N",
-                scale=alt.Scale(domain=feat_labels, range=PALETTE[: len(feat_labels)]),
-                legend=None,
-            ),
-            tooltip=[
-                alt.Tooltip("feature:N", title="Feature"),
-                alt.Tooltip("mean_value:Q", title="Mean", format=".3f"),
-            ],
+                x=alt.X(
+                    "mean_value:Q",
+                    title="Mean (0-1)",
+                    scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(grid=True, gridOpacity=0.2, labelFontSize=10),
+                ),
+                color=alt.Color(
+                    "feature:N",
+                    scale=alt.Scale(domain=feat_labels, range=PALETTE[: len(feat_labels)]),
+                    legend=None,
+                ),
+                tooltip=[
+                    alt.Tooltip("feature:N", title="Feature"),
+                    alt.Tooltip("mean_value:Q", title="Mean", format=".3f"),
+                ],
+            )
         )
-    )
 
-    text = (
-        alt.Chart(means)
-        .mark_text(align="center", dy=-6, fontSize=10, color="#555")
-        .encode(
-            x=alt.X("feature:N", sort=feat_labels),
-            y=alt.Y("mean_value:Q"),
-            text=alt.Text("mean_value:Q", format=".2f"),
+        text = (
+            alt.Chart(means)
+            .mark_text(align="left", dx=4, fontSize=9, color="#555")
+            .encode(
+                y=alt.Y("feature:N", sort=feat_labels),
+                x=alt.X("mean_value:Q"),
+                text=alt.Text("mean_value:Q", format=".2f"),
+            )
         )
-    )
+    else:
+        bars = (
+            alt.Chart(means)
+            .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
+            .encode(
+                x=alt.X(
+                    "feature:N",
+                    sort=feat_labels,
+                    title=None,
+                    axis=alt.Axis(
+                        labelFontSize=11,
+                        labelAngle=-25,
+                        labelLimit=80,
+                        labelAlign="right",
+                        labelBaseline="top",
+                        labelPadding=6,
+                    ),
+                ),
+                y=alt.Y(
+                    "mean_value:Q",
+                    title="Mean (0-1)",
+                    scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(grid=True, gridOpacity=0.2, labelFontSize=11),
+                ),
+                color=alt.Color(
+                    "feature:N",
+                    scale=alt.Scale(domain=feat_labels, range=PALETTE[: len(feat_labels)]),
+                    legend=None,
+                ),
+                tooltip=[
+                    alt.Tooltip("feature:N", title="Feature"),
+                    alt.Tooltip("mean_value:Q", title="Mean", format=".3f"),
+                ],
+            )
+        )
+
+        text = (
+            alt.Chart(means)
+            .mark_text(align="center", dy=-6, fontSize=10, color="#555")
+            .encode(
+                x=alt.X("feature:N", sort=feat_labels),
+                y=alt.Y("mean_value:Q"),
+                text=alt.Text("mean_value:Q", format=".2f"),
+            )
+        )
 
     return (
         (bars + text)

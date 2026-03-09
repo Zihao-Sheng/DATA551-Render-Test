@@ -151,6 +151,7 @@ def make_scatter(
         )
 
     autosize_type = "fit" if str(width) == "container" else "pad"
+    chart = chart.properties(padding={"left": 44, "right": 8, "top": 8, "bottom": 8})
     chart = (
         chart.configure(
             autosize=alt.AutoSizeParams(type=autosize_type, contains="padding")

@@ -5,7 +5,14 @@ FEATURES = ["danceability", "energy", "valence", "acousticness"]
 PALETTE = ["#1DB954", "#FF7A00", "#4C7DFF", "#9B5DE5"]
 
 
-def make_distribution(df: pd.DataFrame, *, max_points: int = 3000, width: int = 480, height: int = 200):
+def make_distribution(
+    df: pd.DataFrame,
+    *,
+    max_points: int = 3000,
+    width: int = 480,
+    height: int = 200,
+    swap_axes: bool = False,
+):
     if df is None or len(df) == 0:
         return (
             alt.Chart(pd.DataFrame({"Feature": [], "value": []}))
@@ -24,6 +31,10 @@ def make_distribution(df: pd.DataFrame, *, max_points: int = 3000, width: int = 
     melted["Feature"] = melted["Feature"].str.capitalize()
     feat_labels = [c.capitalize() for c in cols]
 
+    # Keep Feature Density on canonical axes (x=value, y=density).
+    # `swap_axes` is accepted for API compatibility but intentionally ignored
+    # to avoid unstable orientation rendering in compact popup layouts.
+    _ = swap_axes
     chart = (
         alt.Chart(melted)
         .transform_density(

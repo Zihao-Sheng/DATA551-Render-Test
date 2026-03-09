@@ -2,7 +2,14 @@ import altair as alt
 import pandas as pd
 
 
-def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, height: int = 300):
+def make_genre_bar(
+    df: pd.DataFrame,
+    *,
+    top_n: int = 15,
+    width: int = 480,
+    height: int = 300,
+    swap_axes: bool = False,
+):
     if df is None or len(df) == 0:
         return (
             alt.Chart(pd.DataFrame({"track_genre": [], "avg_popularity": []}))
@@ -30,65 +37,120 @@ def make_genre_bar(df: pd.DataFrame, *, top_n: int = 15, width: int = 480, heigh
     label_limit = 55 if dense else 80
     label_padding = 2 if dense else 6
 
-    bars = (
-        alt.Chart(agg)
-        .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
-        .encode(
-            x=alt.X(
-                "track_genre:N",
-                sort=sort_order,
-                title=None,
-                axis=alt.Axis(
-                    labelAngle=label_angle,
-                    labelLimit=label_limit,
-                    labelAlign="right",
-                    labelBaseline="top",
-                    labelPadding=label_padding,
-                    labelOverlap="greedy",
-                    labelExpr="length(datum.label) > 11 ? slice(datum.label, 0, 11) + '…' : datum.label",
+    if swap_axes:
+        bars = (
+            alt.Chart(agg)
+            .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+            .encode(
+                y=alt.Y(
+                    "track_genre:N",
+                    sort=sort_order,
+                    title=None,
+                    axis=alt.Axis(
+                        labelLimit=120,
+                        labelPadding=4,
+                        labelExpr="length(datum.label) > 16 ? slice(datum.label, 0, 16) + '…' : datum.label",
+                    ),
                 ),
-            ),
-            y=alt.Y(
-                "avg_popularity:Q",
-                title="Avg Popularity",
-                scale=alt.Scale(domain=[0, 100]),
-                axis=alt.Axis(grid=True, gridOpacity=0.2),
-            ),
-            color=alt.Color(
-                "avg_energy:Q",
-                title="Avg Energy",
-                scale=alt.Scale(scheme="plasma", domain=[0, 1]),
-                legend=alt.Legend(
-                    orient="top",
-                    direction="horizontal",
-                    gradientLength=130,
-                    gradientThickness=8,
-                    offset=6,
+                x=alt.X(
+                    "avg_popularity:Q",
+                    title="Avg Popularity",
+                    scale=alt.Scale(domain=[0, 100]),
+                    axis=alt.Axis(grid=True, gridOpacity=0.2),
+                ),
+                color=alt.Color(
+                    "avg_energy:Q",
                     title="Avg Energy",
-                    titleFontSize=10,
-                    labelFontSize=9,
+                    scale=alt.Scale(scheme="plasma", domain=[0, 1]),
+                    legend=alt.Legend(
+                        orient="top",
+                        direction="horizontal",
+                        gradientLength=110,
+                        gradientThickness=8,
+                        offset=6,
+                        title="Avg Energy",
+                        titleFontSize=10,
+                        labelFontSize=9,
+                    ),
                 ),
-            ),
-            tooltip=[
-                alt.Tooltip("track_genre:N", title="Genre"),
-                alt.Tooltip("avg_popularity:Q", title="Avg Popularity", format=".1f"),
-                alt.Tooltip("avg_energy:Q", title="Avg Energy", format=".2f"),
-                alt.Tooltip("avg_danceability:Q", title="Avg Danceability", format=".2f"),
-                alt.Tooltip("count:Q", title="Track Count"),
-            ],
+                tooltip=[
+                    alt.Tooltip("track_genre:N", title="Genre"),
+                    alt.Tooltip("avg_popularity:Q", title="Avg Popularity", format=".1f"),
+                    alt.Tooltip("avg_energy:Q", title="Avg Energy", format=".2f"),
+                    alt.Tooltip("avg_danceability:Q", title="Avg Danceability", format=".2f"),
+                    alt.Tooltip("count:Q", title="Track Count"),
+                ],
+            )
+            .properties(width=width, height=height)
         )
-        .properties(width=width, height=height)
-    )
-
-    text = (
-        alt.Chart(agg)
-        .mark_text(align="center", dy=-6, fontSize=10, color="#666")
-        .encode(
-            x=alt.X("track_genre:N", sort=sort_order),
-            y=alt.Y("avg_popularity:Q"),
-            text=alt.Text("avg_popularity:Q", format=".1f"),
+        text = (
+            alt.Chart(agg)
+            .mark_text(align="left", dx=4, fontSize=9, color="#666")
+            .encode(
+                y=alt.Y("track_genre:N", sort=sort_order),
+                x=alt.X("avg_popularity:Q"),
+                text=alt.Text("avg_popularity:Q", format=".1f"),
+            )
         )
-    )
+    else:
+        bars = (
+            alt.Chart(agg)
+            .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+            .encode(
+                x=alt.X(
+                    "track_genre:N",
+                    sort=sort_order,
+                    title=None,
+                    axis=alt.Axis(
+                        labelAngle=label_angle,
+                        labelLimit=label_limit,
+                        labelAlign="right",
+                        labelBaseline="top",
+                        labelPadding=label_padding,
+                        labelOverlap="greedy",
+                        labelExpr="length(datum.label) > 11 ? slice(datum.label, 0, 11) + '…' : datum.label",
+                    ),
+                ),
+                y=alt.Y(
+                    "avg_popularity:Q",
+                    title="Avg Popularity",
+                    scale=alt.Scale(domain=[0, 100]),
+                    axis=alt.Axis(grid=True, gridOpacity=0.2),
+                ),
+                color=alt.Color(
+                    "avg_energy:Q",
+                    title="Avg Energy",
+                    scale=alt.Scale(scheme="plasma", domain=[0, 1]),
+                    legend=alt.Legend(
+                        orient="top",
+                        direction="horizontal",
+                        gradientLength=130,
+                        gradientThickness=8,
+                        offset=6,
+                        title="Avg Energy",
+                        titleFontSize=10,
+                        labelFontSize=9,
+                    ),
+                ),
+                tooltip=[
+                    alt.Tooltip("track_genre:N", title="Genre"),
+                    alt.Tooltip("avg_popularity:Q", title="Avg Popularity", format=".1f"),
+                    alt.Tooltip("avg_energy:Q", title="Avg Energy", format=".2f"),
+                    alt.Tooltip("avg_danceability:Q", title="Avg Danceability", format=".2f"),
+                    alt.Tooltip("count:Q", title="Track Count"),
+                ],
+            )
+            .properties(width=width, height=height)
+        )
+        text = (
+            alt.Chart(agg)
+            .mark_text(align="center", dy=-6, fontSize=10, color="#666")
+            .encode(
+                x=alt.X("track_genre:N", sort=sort_order),
+                y=alt.Y("avg_popularity:Q"),
+                text=alt.Text("avg_popularity:Q", format=".1f"),
+            )
+        )
 
     base = bars if dense else (bars + text)
 

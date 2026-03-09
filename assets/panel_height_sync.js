@@ -16,6 +16,8 @@
   function syncPanelHeight() {
     const { grid, left } = getElements();
     if (!grid || !left) return;
+    const topbar =
+      document.querySelector(".topbar");
     const main =
       document.querySelector("#main-panel") ||
       document.querySelector(".main-panel");
@@ -37,8 +39,14 @@
       return;
     }
 
-    // Use the rendered natural height of the filters panel as the cap for main/right.
-    const h = Math.ceil(left.getBoundingClientRect().height);
+    // Fit dashboard body to viewport (no page-level scroll):
+    // use available height from grid top to viewport bottom.
+    const gridRect = grid.getBoundingClientRect();
+    const available = Math.max(0, Math.floor(window.innerHeight - gridRect.top - 2));
+    grid.style.setProperty("--viewport-h", `${available}px`);
+
+    // Fill to viewport height so dashboard reaches bottom with no page blank area.
+    const h = Math.max(0, available - 12);
     if (h > 0) {
       grid.style.setProperty("--left-panel-h", `${h}px`);
       if (main) {
