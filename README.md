@@ -4,7 +4,7 @@ An interactive dashboard for exploring how audio features, genres, and moods rel
 
 ## Deployed App
 
-Public app URL: **https://data-551-group-7-dashboard-milestone-2.onrender.com/**  
+Public app URL: **https://data-551-group-7-dashboard.onrender.com/**  
 (Update this link if your final deployment URL changes.)
 
 ## Dashboard Keywords (Plots, Widgets, Interactions)
