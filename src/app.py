@@ -1,4 +1,5 @@
 ﻿import sys
+import os
 from pathlib import Path
 from functools import lru_cache
 import copy
@@ -56,7 +57,41 @@ DTYPE_MAP = {
     "liveness": "float32",
     "instrumentalness": "float32",
 }
+
+def _is_truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _render_env_detected() -> bool:
+    # Render commonly exposes one or more of these environment variables.
+    return any(
+        os.getenv(k)
+        for k in ("RENDER", "RENDER_SERVICE_ID", "RENDER_INSTANCE_ID", "RENDER_EXTERNAL_URL")
+    )
+
+
+SAFE_MODE_PER_GENRE = int(os.getenv("SAFE_MODE_PER_GENRE", "100"))
+SAFE_MODE_ENV = str(os.getenv("SAFE_MODE", "auto")).strip().lower()
+if SAFE_MODE_ENV == "auto":
+    SAFE_MODE_ENABLED = _render_env_detected()
+else:
+    SAFE_MODE_ENABLED = _is_truthy(SAFE_MODE_ENV)
 data = pd.read_csv(DATA_PATH, usecols=REQUIRED_COLUMNS, dtype=DTYPE_MAP)
+if SAFE_MODE_ENABLED:
+    # Deterministic downsample: keep up to N tracks per genre with stable hash order.
+    _safe_hash = pd.util.hash_pandas_object(data["track_id"].astype(str), index=False)
+    data = (
+        data.assign(_safe_hash=_safe_hash.values)
+        .sort_values(["track_genre", "_safe_hash"], kind="mergesort")
+        .groupby("track_genre", group_keys=False)
+        .head(SAFE_MODE_PER_GENRE)
+        .drop(columns=["_safe_hash"])
+        .reset_index(drop=True)
+    )
+    print(
+        f"[SAFE MODE] Enabled (per_genre={SAFE_MODE_PER_GENRE}) "
+        f"-> using {len(data):,} tracks across {data['track_genre'].nunique():,} genres."
+    )
 data["_track_name_lc"] = data["track_name"].astype(str).str.lower()
 data["_artists_lc"] = data["artists"].astype(str).str.lower()
 data["track_id"] = data["track_id"].astype(str)
@@ -154,6 +189,13 @@ BADGE = {
     "marginRight": "4px",
 }
 PROFILE_AXES = ["energy", "valence", "danceability", "acousticness", "speechiness", "liveness"]
+HELP_TEXT = {
+    "filters": "Use these controls to filter tracks by keyword, genre, explicit flag, liked status, tempo, and popularity. Reset All clears all filters.",
+    "scatter": "Click a point to open Track Profile. Brush to select tracks. Use the six buttons below to open the corresponding detail cards.",
+    "tracklist": "Click the star in a row to like or unlike a track.",
+    "track_profile": "Select a track from scatter, Track List, or Similar Tracks to view its profile. Turn on Compare to overlay another track.",
+    "similar_tracks": "Choose a reference track to find audio-similar tracks with lower popularity.",
+}
 
 
 def make_hint_toggle(text, hint_id, expand_width="340px"):
@@ -785,6 +827,8 @@ app.layout = html.Div(
         html.Div(
             id="layout-grid",
             className="layout-grid",
+            n_clicks=0,
+            n_clicks_timestamp=-1,
             style={
                 "maxWidth": "1300px",
                 "margin": "0 auto",
@@ -820,7 +864,7 @@ app.layout = html.Div(
                                     children=[
                                         html.Div("Filters", style={**SECTION_TITLE, "color": TITLE_GREEN, "marginBottom": 0}),
                                         make_hint_toggle(
-                                            "Use these controls to filter tracks by keyword, genre, explicit flag, liked status, tempo, and popularity. Reset All clears all filters.",
+                                            HELP_TEXT["filters"],
                                             hint_id="filters",
                                             expand_width="150px",
                                         ),
@@ -906,6 +950,7 @@ app.layout = html.Div(
                             min=TEMPO_MIN, max=TEMPO_MAX, step=5,
                             value=[TEMPO_MIN, TEMPO_MAX],
                             marks={0: "0", 100: "100", 200: "200", 250: "250"},
+                            updatemode="mouseup",
                             tooltip={"placement": "bottom", "always_visible": False},
                         ),
 
@@ -915,6 +960,7 @@ app.layout = html.Div(
                             min=POP_MIN, max=POP_MAX, step=5,
                             value=[POP_MIN, POP_MAX],
                             marks={0: "0", 50: "50", 100: "100"},
+                            updatemode="mouseup",
                             tooltip={"placement": "bottom", "always_visible": False},
                         ),
 
@@ -976,7 +1022,7 @@ app.layout = html.Div(
                                                                     children=[
                                                                         html.H4("Energy vs Valence", style={**SECTION_TITLE, "marginBottom": 0}),
                                                                         make_hint_toggle(
-                                                                            "Click a point to open Track Profile. Brush to select tracks. Use the six buttons below to open the corresponding detail cards.",
+                                                                            HELP_TEXT["scatter"],
                                                                             hint_id="scatter",
                                                                             expand_width="420px",
                                                                         ),
@@ -1286,7 +1332,7 @@ app.layout = html.Div(
                                                     html.Div(
                                                         style={"display": "flex", "justifyContent": "flex-start", "marginBottom": "4px"},
                                                         children=make_hint_toggle(
-                                                            "Click the star in a row to like or unlike a track.",
+                                                            HELP_TEXT["tracklist"],
                                                             hint_id="tracklist",
                                                             expand_width="320px",
                                                         ),
@@ -1322,7 +1368,7 @@ app.layout = html.Div(
                                             children=[
                                                 html.H4("Track Profile", style={**SECTION_TITLE, "marginBottom": 0}),
                                                 make_hint_toggle(
-                                                    "Select a track from scatter, Track List, or Similar Tracks to view its profile. Turn on Compare to overlay another track.",
+                                                    HELP_TEXT["track_profile"],
                                                     hint_id="track-profile",
                                                     expand_width="360px",
                                                 ),
@@ -1367,7 +1413,7 @@ app.layout = html.Div(
                                     children=[
                                         html.H4("Discover Similar Tracks", style={**SECTION_TITLE, "marginBottom": 0}),
                                         make_hint_toggle(
-                                            "Choose a reference track to find audio-similar tracks with lower popularity.",
+                                            HELP_TEXT["similar_tracks"],
                                             hint_id="similar-tracks",
                                             expand_width="365px",
                                         ),
@@ -1412,11 +1458,40 @@ app.layout = html.Div(
     prevent_initial_call=True,
 )
 def toggle_hint_popup(n_clicks, class_name):
-    base = "hint-toggle"
+    class_tokens = [t for t in str(class_name or "hint-toggle").split() if t and t not in ("is-open", "is-closing")]
+    base = " ".join(class_tokens) if class_tokens else "hint-toggle"
     if not n_clicks:
         return class_name or base
     is_open = "is-open" in (class_name or "")
     return f"{base} is-closing" if is_open else f"{base} is-open"
+
+
+@callback(
+    Output({"type": "hint-toggle", "index": ALL}, "className"),
+    Input("layout-grid", "n_clicks_timestamp"),
+    State({"type": "hint-toggle", "index": ALL}, "className"),
+    State({"type": "hint-toggle-btn", "index": ALL}, "n_clicks_timestamp"),
+    prevent_initial_call=True,
+)
+def close_hints_on_blank_click(layout_ts, class_names, btn_timestamps):
+    if not class_names:
+        return no_update
+    latest_btn_ts = max([t for t in (btn_timestamps or []) if isinstance(t, (int, float))], default=-1)
+    # Ignore bubbling click from hint buttons; only close on true blank-area clicks.
+    if not isinstance(layout_ts, (int, float)) or layout_ts <= latest_btn_ts:
+        return no_update
+
+    next_classes = []
+    changed = False
+    for c in class_names:
+        class_tokens = [t for t in str(c or "hint-toggle").split() if t and t not in ("is-open", "is-closing")]
+        base = " ".join(class_tokens) if class_tokens else "hint-toggle"
+        if "is-open" in str(c or ""):
+            next_classes.append(f"{base} is-closing")
+            changed = True
+        else:
+            next_classes.append(base)
+    return next_classes if changed else no_update
 
 
 @callback(
@@ -2526,6 +2601,7 @@ def update_similar_tracks(track_id, selected_index_data, liked_tracks):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 

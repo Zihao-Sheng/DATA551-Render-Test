@@ -406,6 +406,10 @@ body::-webkit-scrollbar-thumb:hover,
   z-index: 5000;
 }
 
+.left-panel:not(.open) .hint-toggle-filters {
+  display: none;
+}
+
 #left-panel input,
 #left-panel .Select-control,
 #left-panel .Select-placeholder,
