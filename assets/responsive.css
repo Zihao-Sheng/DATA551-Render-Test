@@ -396,14 +396,18 @@ body::-webkit-scrollbar-thumb:hover,
 
 .hint-toggle-filters .hint-toggle-text {
   width: min(var(--hint-expand-width, 150px), 150px);
-  top: -10px;
-  left: 0;
+  top: 0;
+  left: -2px;
   right: auto;
   z-index: 5001;
 }
 
 .hint-toggle-filters {
   z-index: 5000;
+}
+
+.hint-toggle-filters .hint-toggle-btn {
+  z-index: 5002;
 }
 
 .left-panel:not(.open) .hint-toggle-filters {

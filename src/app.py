@@ -1462,7 +1462,7 @@ app.layout = html.Div(
 )
 def handle_hint_popups(_btn_clicks, layout_ts, class_names, btn_ids, btn_timestamps):
     if not class_names:
-        return no_update
+        return []
 
     def _base_class(c):
         class_tokens = [t for t in str(c or "hint-toggle").split() if t and t not in ("is-open", "is-closing")]
@@ -1481,13 +1481,13 @@ def handle_hint_popups(_btn_clicks, layout_ts, class_names, btn_ids, btn_timesta
                 next_classes[i] = f"{base} is-closing" if "is-open" in current else f"{base} is-open"
                 changed = True
                 break
-        return next_classes if changed else no_update
+        return next_classes if changed else list(class_names)
 
     if triggered == "layout-grid":
         latest_btn_ts = max([t for t in (btn_timestamps or []) if isinstance(t, (int, float))], default=-1)
         # Ignore bubbling click from hint buttons; only close on true blank-area clicks.
         if not isinstance(layout_ts, (int, float)) or layout_ts <= latest_btn_ts:
-            return no_update
+            return list(class_names)
         for i, c in enumerate(class_names):
             base = _base_class(c)
             if "is-open" in str(c or ""):
@@ -1495,9 +1495,9 @@ def handle_hint_popups(_btn_clicks, layout_ts, class_names, btn_ids, btn_timesta
                 changed = True
             else:
                 next_classes[i] = base
-        return next_classes if changed else no_update
+        return next_classes if changed else list(class_names)
 
-    return no_update
+    return list(class_names)
 
 
 @callback(
@@ -1934,10 +1934,9 @@ def update_mood_quadrant(selected_index_data, _active_detail):
 def update_song_list(selected_index_data, liked_tracks):
     df = _df_from_filtered_index(selected_index_data)
     if df is None or len(df) == 0:
-        return html.Div(
-            "No tracks match your filters.",
-            style={"fontSize": "13px", "color": "#888", "padding": "16px 0"},
-        )
+        # Keep `song-table` mounted even when empty so callbacks that depend on
+        # song-table.active_cell / song-table.data do not fail with missing-id errors.
+        return make_song_list_table(data.head(0), max_rows=0, liked_track_ids=liked_tracks)
     return make_song_list_table(df, max_rows=5000, liked_track_ids=liked_tracks)
 
 
