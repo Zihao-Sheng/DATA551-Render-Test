@@ -5,7 +5,7 @@ from functools import lru_cache
 import copy
 sys.path.insert(0, str(Path(__file__).parent))
 
-from dash import Dash, html, dcc, Input, Output, State, callback, ctx, no_update, ALL, MATCH
+from dash import Dash, html, dcc, Input, Output, State, callback, ctx, no_update, ALL
 import pandas as pd
 import numpy as np
 import dash_vega_components as dvc
@@ -1452,46 +1452,52 @@ app.layout = html.Div(
 
 
 @callback(
-    Output({"type": "hint-toggle", "index": MATCH}, "className"),
-    Input({"type": "hint-toggle-btn", "index": MATCH}, "n_clicks"),
-    State({"type": "hint-toggle", "index": MATCH}, "className"),
-    prevent_initial_call=True,
-)
-def toggle_hint_popup(n_clicks, class_name):
-    class_tokens = [t for t in str(class_name or "hint-toggle").split() if t and t not in ("is-open", "is-closing")]
-    base = " ".join(class_tokens) if class_tokens else "hint-toggle"
-    if not n_clicks:
-        return class_name or base
-    is_open = "is-open" in (class_name or "")
-    return f"{base} is-closing" if is_open else f"{base} is-open"
-
-
-@callback(
     Output({"type": "hint-toggle", "index": ALL}, "className"),
+    Input({"type": "hint-toggle-btn", "index": ALL}, "n_clicks"),
     Input("layout-grid", "n_clicks_timestamp"),
     State({"type": "hint-toggle", "index": ALL}, "className"),
+    State({"type": "hint-toggle-btn", "index": ALL}, "id"),
     State({"type": "hint-toggle-btn", "index": ALL}, "n_clicks_timestamp"),
     prevent_initial_call=True,
 )
-def close_hints_on_blank_click(layout_ts, class_names, btn_timestamps):
+def handle_hint_popups(_btn_clicks, layout_ts, class_names, btn_ids, btn_timestamps):
     if not class_names:
         return no_update
-    latest_btn_ts = max([t for t in (btn_timestamps or []) if isinstance(t, (int, float))], default=-1)
-    # Ignore bubbling click from hint buttons; only close on true blank-area clicks.
-    if not isinstance(layout_ts, (int, float)) or layout_ts <= latest_btn_ts:
-        return no_update
 
-    next_classes = []
-    changed = False
-    for c in class_names:
+    def _base_class(c):
         class_tokens = [t for t in str(c or "hint-toggle").split() if t and t not in ("is-open", "is-closing")]
-        base = " ".join(class_tokens) if class_tokens else "hint-toggle"
-        if "is-open" in str(c or ""):
-            next_classes.append(f"{base} is-closing")
-            changed = True
-        else:
-            next_classes.append(base)
-    return next_classes if changed else no_update
+        return " ".join(class_tokens) if class_tokens else "hint-toggle"
+
+    next_classes = list(class_names)
+    changed = False
+    triggered = ctx.triggered_id
+
+    if isinstance(triggered, dict) and triggered.get("type") == "hint-toggle-btn":
+        target = triggered.get("index")
+        for i, btn_id in enumerate(btn_ids or []):
+            if isinstance(btn_id, dict) and btn_id.get("index") == target:
+                current = str(class_names[i] or "")
+                base = _base_class(class_names[i])
+                next_classes[i] = f"{base} is-closing" if "is-open" in current else f"{base} is-open"
+                changed = True
+                break
+        return next_classes if changed else no_update
+
+    if triggered == "layout-grid":
+        latest_btn_ts = max([t for t in (btn_timestamps or []) if isinstance(t, (int, float))], default=-1)
+        # Ignore bubbling click from hint buttons; only close on true blank-area clicks.
+        if not isinstance(layout_ts, (int, float)) or layout_ts <= latest_btn_ts:
+            return no_update
+        for i, c in enumerate(class_names):
+            base = _base_class(c)
+            if "is-open" in str(c or ""):
+                next_classes[i] = f"{base} is-closing"
+                changed = True
+            else:
+                next_classes[i] = base
+        return next_classes if changed else no_update
+
+    return no_update
 
 
 @callback(
