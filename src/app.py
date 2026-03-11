@@ -4,7 +4,7 @@ from functools import lru_cache
 import copy
 sys.path.insert(0, str(Path(__file__).parent))
 
-from dash import Dash, html, dcc, Input, Output, State, callback, ctx, no_update, ALL
+from dash import Dash, html, dcc, Input, Output, State, callback, ctx, no_update, ALL, MATCH
 import pandas as pd
 import numpy as np
 import dash_vega_components as dvc
@@ -154,6 +154,25 @@ BADGE = {
     "marginRight": "4px",
 }
 PROFILE_AXES = ["energy", "valence", "danceability", "acousticness", "speechiness", "liveness"]
+
+
+def make_hint_toggle(text, hint_id, expand_width="340px"):
+    return html.Div(
+        id={"type": "hint-toggle", "index": hint_id},
+        className=f"hint-toggle hint-toggle-{hint_id}",
+        style={"--hint-expand-width": expand_width},
+        children=[
+            html.Button(
+                "?",
+                id={"type": "hint-toggle-btn", "index": hint_id},
+                className="hint-toggle-btn",
+                title="Show/Hide guidance",
+                n_clicks=0,
+                type="button",
+            ),
+            html.Span(text, className="hint-toggle-text"),
+        ],
+    )
 
 
 def _extract_track_id_from_scatter_signal(signal_data):
@@ -630,32 +649,32 @@ def _compute_similar_records_cached(track_id_str, pool_ids_tuple):
 @lru_cache(maxsize=96)
 def _genre_bar_spec_cached(selected_index_key):
     df = _df_from_filtered_index(selected_index_key)
-    return make_genre_bar(df, top_n=10, width=290, height=320, swap_axes=True).to_dict()
+    return make_genre_bar(df, top_n=10, width=320, height=352, swap_axes=True).to_dict()
 
 
 @lru_cache(maxsize=96)
 def _distribution_spec_cached(selected_index_key):
     df = _df_from_filtered_index(selected_index_key)
     # Heavier chart on Render: use lower sampling cap for smoother first paint/interactions.
-    return make_distribution(df, max_points=1200, width=290, height=300, swap_axes=False).to_dict()
+    return make_distribution(df, max_points=1200, width=320, height=330, swap_axes=False).to_dict()
 
 
 @lru_cache(maxsize=96)
 def _audio_profile_spec_cached(selected_index_key):
     df = _df_from_filtered_index(selected_index_key)
-    return make_audio_profile(df, width=290, height=320, swap_axes=True).to_dict()
+    return make_audio_profile(df, width=320, height=352, swap_axes=True).to_dict()
 
 
 @lru_cache(maxsize=96)
 def _tempo_distribution_spec_cached(selected_index_key):
     df = _df_from_filtered_index(selected_index_key)
-    return make_tempo_distribution(df, width=290, height=240).to_dict()
+    return make_tempo_distribution(df, width=320, height=264).to_dict()
 
 
 @lru_cache(maxsize=96)
 def _mood_quadrant_spec_cached(selected_index_key):
     df = _df_from_filtered_index(selected_index_key)
-    return make_mood_quadrant(df, width=290, height=250).to_dict()
+    return make_mood_quadrant(df, width=320, height=275).to_dict()
 
 
 @lru_cache(maxsize=96)
@@ -666,7 +685,7 @@ def _popularity_hist_spec_cached(selected_index_key):
             alt.Chart(pd.DataFrame({"label": ["No data"], "value": [1]}))
             .mark_text(fontSize=12, color="#8898a9")
             .encode(text="label:N")
-            .properties(width=290, height=220)
+            .properties(width=320, height=242)
         )
         return chart.to_dict()
 
@@ -678,7 +697,7 @@ def _popularity_hist_spec_cached(selected_index_key):
             alt.Chart(pd.DataFrame({"label": ["No data"], "value": [1]}))
             .mark_text(fontSize=12, color="#8898a9")
             .encode(text="label:N")
-            .properties(width=290, height=220)
+            .properties(width=320, height=242)
         )
         return chart.to_dict()
 
@@ -705,7 +724,7 @@ def _popularity_hist_spec_cached(selected_index_key):
                 alt.Tooltip("count():Q", title="Tracks"),
             ],
         )
-        .properties(width=290, height=240)
+        .properties(width=320, height=264)
         .configure_view(stroke=None)
         .configure_axis(labelFontSize=10, titleFontSize=11, gridOpacity=0.2)
     )
@@ -787,9 +806,26 @@ app.layout = html.Div(
                             className="filter-toggle-btn",
                         ),
                         html.Div(
-                            style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "8px"},
+                            style={
+                                "display": "flex",
+                                "alignItems": "center",
+                                "justifyContent": "space-between",
+                                "gap": "8px",
+                                "position": "relative",
+                                "zIndex": 6000,
+                            },
                             children=[
-                                html.Div("Filters", style={**SECTION_TITLE, "color": TITLE_GREEN, "marginBottom": 0}),
+                                html.Div(
+                                    style={"display": "flex", "alignItems": "center", "gap": "6px"},
+                                    children=[
+                                        html.Div("Filters", style={**SECTION_TITLE, "color": TITLE_GREEN, "marginBottom": 0}),
+                                        make_hint_toggle(
+                                            "Use these controls to filter tracks by keyword, genre, explicit flag, liked status, tempo, and popularity. Reset All clears all filters.",
+                                            hint_id="filters",
+                                            expand_width="150px",
+                                        ),
+                                    ],
+                                ),
                                 html.Button(
                                     "Reset All",
                                     id="reset-all-btn",
@@ -930,12 +966,23 @@ app.layout = html.Div(
                                                         style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start"},
                                                         children=[
                                                             html.Div([
-                                                                html.H4("Energy vs Valence", style=SECTION_TITLE),
-                                                                html.Div(id="scatter-meta", style={"fontSize": "10px", "color": "#888", "marginBottom": "5px"}),
                                                                 html.Div(
-                                                                    "Tip: click one point to open profile; brush an area to define selected tracks.",
-                                                                    style={"fontSize": "9px", "color": "#8a98a6", "marginBottom": "4px"},
+                                                                    style={
+                                                                        "display": "flex",
+                                                                        "justifyContent": "flex-start",
+                                                                        "alignItems": "center",
+                                                                        "gap": "6px",
+                                                                    },
+                                                                    children=[
+                                                                        html.H4("Energy vs Valence", style={**SECTION_TITLE, "marginBottom": 0}),
+                                                                        make_hint_toggle(
+                                                                            "Click a point to open Track Profile. Brush to select tracks. Use the six buttons below to open the corresponding detail cards.",
+                                                                            hint_id="scatter",
+                                                                            expand_width="420px",
+                                                                        ),
+                                                                    ],
                                                                 ),
+                                                                html.Div(id="scatter-meta", style={"fontSize": "10px", "color": "#888", "marginTop": "4px", "marginBottom": "5px"}),
                                                             ]),
                                                             dcc.RadioItems(
                                                                 id="toolbox-mode",
@@ -1061,17 +1108,17 @@ app.layout = html.Div(
                                                     html.Div(
                                                         style={
                                                             "display": "grid",
-                                                            "gridTemplateColumns": "30% 70%",
+                                                            "gridTemplateColumns": "33% 67%",
                                                             "gap": "10px",
                                                             "alignItems": "end",
-                                                            "minHeight": "510px",
+                                                            "minHeight": "561px",
                                                             "marginTop": "6px",
                                                         },
                                                         children=[
                                                             html.Div(
                                                                 id="insights-popup-column",
                                                                 style={
-                                                                    "minHeight": "420px",
+                                                                    "minHeight": "462px",
                                                                     "display": "flex",
                                                                     "alignItems": "flex-start",
                                                                     "alignSelf": "start",
@@ -1084,7 +1131,7 @@ app.layout = html.Div(
                                                                         children=[
                                                                             html.H4("Top Genres by Popularity", style=SECTION_TITLE),
                                                                             html.Div(
-                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                style={"fontSize": "11px", "color": "#888", "marginBottom": "7px"},
                                                                                 children="Top genres ranked by mean popularity; color indicates mean energy.",
                                                                             ),
                                                                             dvc.Vega(
@@ -1101,7 +1148,7 @@ app.layout = html.Div(
                                                                         children=[
                                                                             html.H4("Avg Audio Profile", style=SECTION_TITLE),
                                                                             html.Div(
-                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                style={"fontSize": "11px", "color": "#888", "marginBottom": "7px"},
                                                                                 children="Mean values of key audio features for the current selection.",
                                                                             ),
                                                                             dvc.Vega(
@@ -1118,7 +1165,7 @@ app.layout = html.Div(
                                                                         children=[
                                                                             html.H4("Feature Density — Selected Tracks", style=SECTION_TITLE),
                                                                             html.Div(
-                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                style={"fontSize": "11px", "color": "#888", "marginBottom": "7px"},
                                                                                 children="Overlaid density curves of key audio features in the selection.",
                                                                             ),
                                                                             html.Div(
@@ -1138,7 +1185,7 @@ app.layout = html.Div(
                                                                         children=[
                                                                             html.H4("Tempo Distribution", style=SECTION_TITLE),
                                                                             html.Div(
-                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                style={"fontSize": "11px", "color": "#888", "marginBottom": "7px"},
                                                                                 children="Tempo (BPM) distribution for selected tracks, with median reference line.",
                                                                             ),
                                                                             dvc.Vega(
@@ -1155,7 +1202,7 @@ app.layout = html.Div(
                                                                         children=[
                                                                             html.H4("Popularity Histogram", style=SECTION_TITLE),
                                                                             html.Div(
-                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                style={"fontSize": "11px", "color": "#888", "marginBottom": "7px"},
                                                                                 children="Histogram of popularity scores (0-100) for the current selection.",
                                                                             ),
                                                                             dvc.Vega(
@@ -1172,7 +1219,7 @@ app.layout = html.Div(
                                                                         children=[
                                                                             html.H4("Mood Quadrant", style=SECTION_TITLE),
                                                                             html.Div(
-                                                                                style={"fontSize": "9px", "color": "#888", "marginBottom": "7px"},
+                                                                                style={"fontSize": "11px", "color": "#888", "marginBottom": "7px"},
                                                                                 children="5x5 energy-valence heatmap showing mood concentration across the selection.",
                                                                             ),
                                                                             dvc.Vega(
@@ -1202,10 +1249,11 @@ app.layout = html.Div(
                                                                 ),
                                                                 style={
                                                                     "display": "flex",
-                                                                    "justifyContent": "flex-end",
+                                                                    "justifyContent": "flex-start",
                                                                     "alignItems": "flex-end",
                                                                     "width": "100%",
-                                                                    "minHeight": "510px",
+                                                                    "minHeight": "561px",
+                                                                    "transform": "translate(-8px, -20px)",
                                                                     "paddingBottom": "10px",
                                                                 },
                                                             ),
@@ -1236,8 +1284,12 @@ app.layout = html.Div(
                                                 style={**CARD, "minWidth": 0, "marginBottom": 0, "marginTop": "4px", "padding": "8px 10px"},
                                                 children=[
                                                     html.Div(
-                                                        "Click the star before Title to like/unlike a track.",
-                                                        style={"fontSize": "9px", "color": "#888", "marginBottom": "4px"},
+                                                        style={"display": "flex", "justifyContent": "flex-start", "marginBottom": "4px"},
+                                                        children=make_hint_toggle(
+                                                            "Click the star in a row to like or unlike a track.",
+                                                            hint_id="tracklist",
+                                                            expand_width="320px",
+                                                        ),
                                                     ),
                                                     html.Div(
                                                         id="song-list-container",
@@ -1265,41 +1317,61 @@ app.layout = html.Div(
                                 html.Div(
                                     style={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "8px"},
                                     children=[
-                                        html.H4("Track Profile", style={**SECTION_TITLE, "marginBottom": 0}),
-                                        html.Button(
-                                            "Compare: Off",
-                                            id="compare-toggle-btn",
-                                            n_clicks=0,
+                                        html.Div(
+                                            style={"display": "flex", "alignItems": "center", "gap": "6px"},
+                                            children=[
+                                                html.H4("Track Profile", style={**SECTION_TITLE, "marginBottom": 0}),
+                                                make_hint_toggle(
+                                                    "Select a track from scatter, Track List, or Similar Tracks to view its profile. Turn on Compare to overlay another track.",
+                                                    hint_id="track-profile",
+                                                    expand_width="360px",
+                                                ),
+                                            ],
+                                        ),
+                                        html.Div(
                                             style={
-                                                "border": "1px solid #dbe5df",
-                                                "backgroundColor": "#f7f9f8",
-                                                "color": "#60756a",
-                                                "fontSize": "10px",
-                                                "fontWeight": "600",
-                                                "padding": "4px 7px",
-                                                "borderRadius": "8px",
-                                                "cursor": "pointer",
-                                                "whiteSpace": "nowrap",
+                                                "display": "flex",
+                                                "alignItems": "center",
+                                                "gap": "7px",
                                             },
+                                            children=[
+                                                html.Button(
+                                                    "Compare: Off",
+                                                    id="compare-toggle-btn",
+                                                    n_clicks=0,
+                                                    style={
+                                                        "border": "1px solid #dbe5df",
+                                                        "backgroundColor": "#f7f9f8",
+                                                        "color": "#60756a",
+                                                        "fontSize": "10px",
+                                                        "fontWeight": "600",
+                                                        "padding": "4px 7px",
+                                                        "borderRadius": "8px",
+                                                        "cursor": "pointer",
+                                                        "whiteSpace": "nowrap",
+                                                    },
+                                                ),
+                                            ],
                                         ),
                                     ],
-                                ),
-                                html.Div(
-                                    "Click a song from scatter / similar list / table to view its profile.",
-                                    style={"fontSize": "9px", "color": "#888", "marginBottom": "7px", "lineHeight": "1.4"},
                                 ),
                                 html.Div(id="song-profile-container"),
                             ],
                         ),
                         html.Div(
                             id="similar-tracks-card",
-                            style={**CARD, "marginBottom": 0, "display": "flex", "flexDirection": "column", "minHeight": 0},
+                            style={**CARD, "marginBottom": 0, "marginTop": "8px", "display": "flex", "flexDirection": "column", "minHeight": 0},
                             children=[
-                                html.H4("Discover Similar Tracks", style=SECTION_TITLE),
                                 html.Div(
-                                    "Pick a popular track from your selection — we'll find "
-                                    "audio-similar but less-discovered songs.",
-                                    style={"fontSize": "9px", "color": "#888", "marginBottom": "7px", "lineHeight": "1.4"},
+                                    style={"display": "flex", "justifyContent": "flex-start", "alignItems": "center", "gap": "6px"},
+                                    children=[
+                                        html.H4("Discover Similar Tracks", style={**SECTION_TITLE, "marginBottom": 0}),
+                                        make_hint_toggle(
+                                            "Choose a reference track to find audio-similar tracks with lower popularity.",
+                                            hint_id="similar-tracks",
+                                            expand_width="365px",
+                                        ),
+                                    ],
                                 ),
                                 dcc.Dropdown(
                                     id="similar-track-dropdown",
@@ -1307,7 +1379,7 @@ app.layout = html.Div(
                                     options=[],
                                     value=None,
                                     clearable=True,
-                                    style={"fontSize": "10px", "marginBottom": "8px"},
+                                    style={"fontSize": "10px", "marginTop": "4px", "marginBottom": "8px"},
                                 ),
                                 html.Div(id="similar-tracks-container", style={"flex": "1 1 auto", "minHeight": 0, "overflowY": "auto", "overflowX": "hidden", "paddingRight": "2px"}),
                             ],
@@ -1331,6 +1403,20 @@ app.layout = html.Div(
         dcc.Store(id="insights-detail-store", data="density"),
     ],
 )
+
+
+@callback(
+    Output({"type": "hint-toggle", "index": MATCH}, "className"),
+    Input({"type": "hint-toggle-btn", "index": MATCH}, "n_clicks"),
+    State({"type": "hint-toggle", "index": MATCH}, "className"),
+    prevent_initial_call=True,
+)
+def toggle_hint_popup(n_clicks, class_name):
+    base = "hint-toggle"
+    if not n_clicks:
+        return class_name or base
+    is_open = "is-open" in (class_name or "")
+    return f"{base} is-closing" if is_open else f"{base} is-open"
 
 
 @callback(
@@ -2105,7 +2191,7 @@ def render_song_profile(
                                 },
                             ),
                         ],
-                        style={"display": "flex", "alignItems": "center", "gap": "8px", "flex": "0 0 auto"},
+                        style={"display": "flex", "alignItems": "center", "gap": "8px", "flex": "0 0 auto", "marginTop": "8px"},
                     ),
                 ],
             ),
@@ -2440,5 +2526,6 @@ def update_similar_tracks(track_id, selected_index_data, liked_tracks):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
