@@ -17,8 +17,8 @@ def make_scatter(
     topk_genres: int = 10,
     selection_name: str = "brush_selection",
     point_selection_name: str = "track_pick",
-    width: int = 520,
-    height: int = 380,
+    width: int | str = 520,
+    height: int | str = 380,
 ):
     if df is None or len(df) == 0:
         return (
@@ -67,13 +67,21 @@ def make_scatter(
                 "energy:Q",
                 title="Energy",
                 scale=alt.Scale(domain=x_domain),
-                axis=alt.Axis(grid=False),
+                axis=alt.Axis(
+                    grid=False,
+                    labelFontSize=alt.ExprRef(expr="clamp(width/45, 8, 12)"),
+                    titleFontSize=alt.ExprRef(expr="clamp(width/38, 9, 13)"),
+                ),
             ),
             y=alt.Y(
                 "valence:Q",
                 title="Valence (Mood)",
                 scale=alt.Scale(domain=y_domain),
-                axis=alt.Axis(grid=False),
+                axis=alt.Axis(
+                    grid=False,
+                    labelFontSize=alt.ExprRef(expr="clamp(width/45, 8, 12)"),
+                    titleFontSize=alt.ExprRef(expr="clamp(width/38, 9, 13)"),
+                ),
             ),
             color=alt.Color(
                 "genre_group:N",
@@ -82,13 +90,13 @@ def make_scatter(
                 scale=alt.Scale(domain=legend_order, range=palette),
                 legend=alt.Legend(
                     symbolType="circle",
-                    symbolSize=100,
+                    symbolSize=alt.ExprRef(expr="clamp(width*0.16, 56, 110)"),
                     symbolOpacity=1,
                     symbolStrokeColor="#ffffff",
                     symbolStrokeWidth=0.6,
                     orient="right",
-                    titleFontSize=11,
-                    labelFontSize=10,
+                    titleFontSize=alt.ExprRef(expr="clamp(width/46, 9, 12)"),
+                    labelFontSize=alt.ExprRef(expr="clamp(width/52, 8, 11)"),
                 ),
             ),
             tooltip=[
@@ -108,8 +116,16 @@ def make_scatter(
     size_enc = alt.Size(
         "popularity:Q",
         title="Popularity",
-        scale=alt.Scale(range=[20, 200]),
-        legend=alt.Legend(orient="right", titleFontSize=10, labelFontSize=10),
+        scale=alt.Scale(
+            rangeMin=alt.ExprRef(expr="clamp(width*0.045, 10, 24)"),
+            rangeMax=alt.ExprRef(expr="clamp(width*0.42, 90, 220)"),
+        ),
+        legend=alt.Legend(
+            orient="right",
+            titleFontSize=alt.ExprRef(expr="clamp(width/48, 9, 12)"),
+            labelFontSize=alt.ExprRef(expr="clamp(width/54, 8, 11)"),
+            symbolSize=alt.ExprRef(expr="clamp(width*0.14, 44, 92)"),
+        ),
     )
     point_pick = alt.selection_point(
         name=point_selection_name,
@@ -150,7 +166,7 @@ def make_scatter(
             .interactive()
         )
 
-    autosize_type = "fit" if str(width) == "container" else "pad"
+    autosize_type = "fit" if (str(width) == "container" or str(height) == "container") else "pad"
     chart = chart.properties(padding={"left": 44, "right": 8, "top": 8, "bottom": 8})
     chart = (
         chart.configure(
