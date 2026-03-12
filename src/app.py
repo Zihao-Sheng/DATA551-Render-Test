@@ -1299,7 +1299,6 @@ app.layout = html.Div(
                                                                     "alignItems": "flex-end",
                                                                     "width": "100%",
                                                                     "minHeight": "561px",
-                                                                    "transform": "translate(-8px, -20px)",
                                                                     "paddingBottom": "10px",
                                                                 },
                                                             ),
