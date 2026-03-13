@@ -7,9 +7,13 @@ An interactive dashboard for exploring how audio features, genres, and moods rel
 Public app URL: **https://data-551-group-7-dashboard.onrender.com/**  
 (Update this link if your final deployment URL changes.)
 
+## Deployment Platform
+
+This project is deployed on **Render** (not Heroku).
+
 ## Dashboard Keywords (Plots, Widgets, Interactions)
 
-- Plots: interactive scatterplot, top-genre bar chart, average audio profile bar chart, feature density chart, popularity histogram, tempo distribution histogram, mood heatmap (5x5)
+- Plots: interactive scatterplot (Plotly), top-genre bar chart, average audio profile bar chart, feature density chart, popularity histogram, tempo distribution histogram, mood heatmap (5x5)
 - Widgets: search input, genre dropdown + chips, radio buttons, checklist, range sliders, tab switch, dropdown selector, like/favorite stars
 - Interactions: brush selection, click-to-open track profile, similar-track discovery, compare mode, pop-up insight cards, filter drawer toggle, local liked-track persistence
 
@@ -58,6 +62,11 @@ Steps:
 3. Run the app: `python src/app.py`
 4. Open `http://127.0.0.1:8050/` in your browser.
 
+Optional environment variables:
+- `DASH_DEBUG=true` to enable Dash debug mode locally (default is off)
+- `SAFE_MODE=auto|true|false` (default `auto`)
+- `SAFE_MODE_PER_GENRE=100` (used when safe mode is enabled)
+
 
 ## App Description & Sketch
 
@@ -77,13 +86,6 @@ View the dashboard sketch here:
 
 ![Dashboard Overview](./doc/milestone4/overview.png)
 
-## Run Locally
-
-1. Install dependencies: `pip install -r requirements.txt`
-2. Run the app: `python src/app.py`
-3. Open: `http://127.0.0.1:8050/`
-
-
 ## Repository Structure
 
 ```text
@@ -101,8 +103,15 @@ DATA-551-GROUP-7/
 |       |-- Dashboard_Overview.png
 |       |-- MILESTONE2_CHECKLIST.md
 |       `-- reflection-milestone2.md
+|   |-- milestone3/
+|   |   |-- Milestone3_Question_List.docx
+|   |   |-- Milestone3_Question_List.pdf
+|   |   |-- Reflection_on_Spotify_Track_List_Dashboard_Feedback.docx
+|   |   |-- Reflection_on_Spotify_Track_List_Dashboard_Feedback.pdf
+|   |   `-- Spotify Track Insights Explorer User Feedback.csv
 |   `-- milestone4/
-|       `-- overview.png
+|       |-- overview.png
+|       `-- reflection-milestone4.md
 |-- reports/
 |   `-- Milestone 2.ipynb
 |-- src/
