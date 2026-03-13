@@ -1,3 +1,5 @@
+"""Scatter chart builders for energy-valence exploration views."""
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -11,6 +13,14 @@ OTHER_COLOR = "#d4d4d4"
 
 
 def _marker_sizes(popularity: pd.Series) -> np.ndarray:
+    """Convert popularity scores into marker sizes for scatter bubbles.
+
+    Args:
+        popularity: Series of popularity values in the range [0, 100].
+
+    Returns:
+        np.ndarray: Bubble sizes scaled for chart readability.
+    """
     pop = pd.to_numeric(popularity, errors="coerce").fillna(0).to_numpy(dtype=float)
     pop = np.clip(pop, 0, 100)
     # Similar visual hierarchy to the original chart.
@@ -18,6 +28,14 @@ def _marker_sizes(popularity: pd.Series) -> np.ndarray:
 
 
 def _text_color_for_bg(hex_color: str) -> str:
+    """Choose a readable text color based on a background hex color.
+
+    Args:
+        hex_color: Background color as a six-digit hex string.
+
+    Returns:
+        str: Dark or light text color token for contrast.
+    """
     c = str(hex_color or "").lstrip("#")
     if len(c) != 6:
         return "#ffffff"
@@ -43,6 +61,21 @@ def make_scatter(
     width: int | str = 520,
     height: int | str = 380,
 ):
+    """Build an interactive Plotly scatter chart for track selection.
+
+    Args:
+        df: Input track rows containing fields used by the scatter view.
+        mode: Interaction mode, such as ``brush`` for lasso selection behavior.
+        max_points: Maximum number of points to render before deterministic sampling.
+        topk_genres: Number of top genres to color separately from ``Other``.
+        selection_name: Compatibility parameter retained for legacy callers.
+        point_selection_name: Compatibility parameter retained for legacy callers.
+        width: Target chart width in pixels.
+        height: Target chart height in pixels.
+
+    Returns:
+        tuple[go.Figure, dict]: Scatter figure and metadata about rendered points.
+    """
     _ = selection_name, point_selection_name  # Kept for API compatibility.
     fixed_width = int(width) if isinstance(width, int) else 520
     fixed_height = int(height) if isinstance(height, int) else 380

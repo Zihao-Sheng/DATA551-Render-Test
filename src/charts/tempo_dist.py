@@ -1,3 +1,5 @@
+"""Tempo distribution chart builders for BPM histogram summaries."""
+
 import altair as alt
 import pandas as pd
 
@@ -8,6 +10,16 @@ def make_tempo_distribution(
     width: int = 290,
     height: int = 240,
 ):
+    """Build a tempo histogram with a highlighted median reference line.
+
+    Args:
+        df: Input track rows containing a ``tempo`` column.
+        width: Target chart width in pixels.
+        height: Target chart height in pixels.
+
+    Returns:
+        alt.Chart: Configured Altair histogram chart.
+    """
     if df is None or len(df) == 0 or "tempo" not in df.columns:
         return (
             alt.Chart(pd.DataFrame({"label": ["No data"]}))

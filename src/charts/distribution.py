@@ -1,3 +1,5 @@
+"""Distribution chart builders for normalized audio feature densities."""
+
 import altair as alt
 import pandas as pd
 
@@ -13,6 +15,18 @@ def make_distribution(
     height: int = 200,
     swap_axes: bool = False,
 ):
+    """Build a multi-feature density area chart for selected tracks.
+
+    Args:
+        df: Input track rows containing normalized audio feature columns.
+        max_points: Maximum number of rows to sample for rendering performance.
+        width: Target chart width in pixels.
+        height: Target chart height in pixels.
+        swap_axes: Compatibility flag retained for callers; currently ignored.
+
+    Returns:
+        alt.Chart: Configured Altair density chart.
+    """
     if df is None or len(df) == 0:
         return (
             alt.Chart(pd.DataFrame({"Feature": [], "value": []}))

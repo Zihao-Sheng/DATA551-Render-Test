@@ -1,3 +1,5 @@
+"""Audio profile chart builders for aggregated feature comparisons."""
+
 import altair as alt
 import pandas as pd
 
@@ -12,6 +14,17 @@ PALETTE = [
 
 
 def make_audio_profile(df: pd.DataFrame, *, width: int = 240, height: int = 260, swap_axes: bool = False):
+    """Create an aggregated audio-feature profile bar chart.
+
+    Args:
+        df: Input track rows containing profile feature columns.
+        width: Target chart width in pixels.
+        height: Target chart height in pixels.
+        swap_axes: When True, render horizontal bars instead of vertical bars.
+
+    Returns:
+        alt.Chart: Configured Altair bar chart for profile means.
+    """
     if df is None or len(df) == 0:
         return (
             alt.Chart(pd.DataFrame({"feature": [], "mean_value": []}))
