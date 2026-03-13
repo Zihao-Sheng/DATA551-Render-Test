@@ -59,11 +59,24 @@ DTYPE_MAP = {
 }
 
 def _is_truthy(value: str | None) -> bool:
+    """Normalize a string-like flag into a boolean value.
+
+    Args:
+        value: Input value to evaluate.
+
+    Returns:
+        bool: True when the value matches supported truthy tokens.
+    """
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _render_env_detected() -> bool:
     # Render commonly exposes one or more of these environment variables.
+    """Detect whether the app is running on Render-like infrastructure.
+
+    Returns:
+        bool: True when any Render-specific environment variable is present.
+    """
     return any(
         os.getenv(k)
         for k in ("RENDER", "RENDER_SERVICE_ID", "RENDER_INSTANCE_ID", "RENDER_EXTERNAL_URL")
@@ -199,6 +212,16 @@ HELP_TEXT = {
 
 
 def make_hint_toggle(text, hint_id, expand_width="340px"):
+    """Build a reusable help-toggle UI component.
+
+    Args:
+        text: Help text shown when the toggle is open.
+        hint_id: Stable identifier used for Dash ids and CSS classes.
+        expand_width: CSS width token used by the expanded hint panel.
+
+    Returns:
+        dash.development.base_component.Component: Configured hint toggle component.
+    """
     return html.Div(
         id={"type": "hint-toggle", "index": hint_id},
         className=f"hint-toggle hint-toggle-{hint_id}",
@@ -218,9 +241,13 @@ def make_hint_toggle(text, hint_id, expand_width="340px"):
 
 
 def _extract_track_id_from_scatter_signal(signal_data):
-    """
-    Best-effort parser for Vega selection signal payloads.
-    Handles nested dict/list structures produced by point selections.
+    """Extract the selected track id from Vega scatter signal payloads.
+
+    Args:
+        signal_data: Vega signal payload emitted by the scatter chart.
+
+    Returns:
+        str | None: Selected track id when present; otherwise None.
     """
     if not signal_data:
         return None
@@ -308,9 +335,13 @@ def _extract_track_id_from_scatter_signal(signal_data):
 
 
 def _extract_track_payload_from_scatter_signal(signal_data):
-    """
-    Best-effort parser for Vega point-selection payload with extra fields.
-    Returns a dict containing at least track_id when found.
+    """Extract selected track metadata from Vega scatter signal payloads.
+
+    Args:
+        signal_data: Vega signal payload emitted by the scatter chart.
+
+    Returns:
+        dict[str, str] | None: Extracted selection payload or None.
     """
     if not signal_data:
         return None
@@ -394,6 +425,14 @@ def _extract_track_payload_from_scatter_signal(signal_data):
 
 
 def _get_track_row_by_index(row_index):
+    """Fetch a track row by DataFrame index and coerce numeric fields.
+
+    Args:
+        row_index: Row index value from selection payloads.
+
+    Returns:
+        pandas.Series | None: Matching row with coerced numeric fields, if found.
+    """
     if row_index is None:
         return None
     try:
@@ -410,6 +449,17 @@ def _get_track_row_by_index(row_index):
 
 
 def _get_track_row(track_id: str, *, track_name: str | None = None, artists: str | None = None, track_genre: str | None = None):
+    """Fetch a track row by track id with optional metadata-based disambiguation.
+
+    Args:
+        track_id: Reference track id.
+        track_name: Track name used for row disambiguation.
+        artists: Artist name used for row disambiguation.
+        track_genre: Genre value used for row disambiguation.
+
+    Returns:
+        pandas.Series | None: Matching row with coerced numeric fields, if found.
+    """
     if not track_id:
         return None
     tid = str(track_id).strip()
@@ -441,6 +491,14 @@ def _get_track_row(track_id: str, *, track_name: str | None = None, artists: str
 
 
 def _build_genre_color_map(top_genres):
+    """Create a deterministic genre-to-color mapping for chart and profile views.
+
+    Args:
+        top_genres: Ordered top-genre labels from scatter metadata.
+
+    Returns:
+        dict[str, str]: Mapping from genre label to display color.
+    """
     top = [str(g) for g in (top_genres or [])]
     legend_order = top + ["Other"]
     palette = BRIGHT_PALETTE[: len(legend_order) - 1] + [OTHER_COLOR]
@@ -448,6 +506,15 @@ def _build_genre_color_map(top_genres):
 
 
 def _color_for_genre(track_genre: str, genre_color_map):
+    """Resolve the display color for a genre from a provided color map.
+
+    Args:
+        track_genre: Genre value used for row disambiguation.
+        genre_color_map: Genre-to-color lookup map.
+
+    Returns:
+        str: Hex/rgb color string for the provided genre.
+    """
     if isinstance(genre_color_map, dict) and genre_color_map:
         g = str(track_genre or "")
         return genre_color_map.get(g, genre_color_map.get("Other", OTHER_COLOR))
@@ -456,6 +523,16 @@ def _color_for_genre(track_genre: str, genre_color_map):
 
 @lru_cache(maxsize=2048)
 def _build_primary_radar_dict(values_key, color_key, compare_mode_key):
+    """Build and cache the base radar chart specification for a track profile.
+
+    Args:
+        values_key: Hashable tuple of radar metric values.
+        color_key: Primary color used to style trace elements.
+        compare_mode_key: Boolean-like key indicating compare mode state.
+
+    Returns:
+        dict: Plotly figure dictionary for the primary radar trace.
+    """
     theta = ["Energy", "Valence", "Dance", "Acoustic", "Speech", "Live"]
     values = [float(v) for v in values_key]
     fig = go.Figure(
@@ -496,6 +573,15 @@ def _build_primary_radar_dict(values_key, color_key, compare_mode_key):
 
 @lru_cache(maxsize=2048)
 def _build_compare_trace_dict(values_key, color_key):
+    """Build and cache the comparison radar trace for a second track.
+
+    Args:
+        values_key: Hashable tuple of radar metric values.
+        color_key: Primary color used to style trace elements.
+
+    Returns:
+        dict: Plotly trace dictionary for the comparison radar trace.
+    """
     theta = ["Energy", "Valence", "Dance", "Acoustic", "Speech", "Live"]
     values = [float(v) for v in values_key]
     return go.Scatterpolar(
@@ -510,10 +596,28 @@ def _build_compare_trace_dict(values_key, color_key):
 
 
 def _normalize_key_seq(values):
+    """Normalize an iterable into a sorted tuple of non-empty strings.
+
+    Args:
+        values: Iterable values to normalize.
+
+    Returns:
+        tuple[str, ...]: Sorted tuple of normalized string values.
+    """
     return tuple(sorted(str(v) for v in (values or []) if str(v)))
 
 
 def _normalize_bounds(bounds, default_lo, default_hi):
+    """Normalize a two-value bound pair into floats with defaults.
+
+    Args:
+        bounds: Two-value bound payload to normalize.
+        default_lo: Fallback lower bound when missing.
+        default_hi: Fallback upper bound when missing.
+
+    Returns:
+        tuple[float, float]: Normalized low and high bounds.
+    """
     if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
         lo = default_lo if bounds[0] is None else bounds[0]
         hi = default_hi if bounds[1] is None else bounds[1]
@@ -533,6 +637,22 @@ def _compute_filtered_index_cached(
     liked_only,
     liked_key,
 ):
+    """Compute and cache filtered row indexes for the current filter state.
+
+    Args:
+        keyword_key: Normalized keyword filter key.
+        genre_key: Normalized selected-genre cache key.
+        explicit_mode_key: Normalized explicit-content mode key.
+        tempo_lo: Lower tempo bound.
+        tempo_hi: Upper tempo bound.
+        pop_lo: Lower popularity bound.
+        pop_hi: Upper popularity bound.
+        liked_only: Whether liked-only filtering is active.
+        liked_key: Normalized liked-track cache key.
+
+    Returns:
+        tuple[int, ...]: Tuple of filtered DataFrame indexes.
+    """
     explicit_val = {"explicit": True, "clean": False}.get(explicit_mode_key)
     genre_set = set(genre_key) if genre_key else None
     filtered = filter_tracks(
@@ -562,6 +682,20 @@ def _compute_filtered_df(
     liked_filter_values=None,
     liked_tracks=None,
 ):
+    """Build the filtered DataFrame for the current filter controls.
+
+    Args:
+        keyword: Keyword filter from the search box.
+        genre_values: Selected genres from filter controls.
+        explicit_mode: Explicit-content filter mode.
+        tempo_bounds: Selected tempo range bounds.
+        pop_bounds: Selected popularity range bounds.
+        liked_filter_values: Liked-only checklist values.
+        liked_tracks: Stored liked track ids.
+
+    Returns:
+        pandas.DataFrame: DataFrame filtered according to the active controls.
+    """
     keyword_key = (keyword or "").strip().lower()
     genre_key = _normalize_key_seq(genre_values)
     tempo_lo, tempo_hi = _normalize_bounds(tempo_bounds, TEMPO_MIN, TEMPO_MAX)
@@ -586,6 +720,15 @@ def _compute_filtered_df(
 
 
 def _compute_selected_df(filtered_df, bounds):
+    """Apply brush bounds to the filtered DataFrame.
+
+    Args:
+        filtered_df: DataFrame after filter processing.
+        bounds: Two-value bound payload to normalize.
+
+    Returns:
+        pandas.DataFrame: Filtered subset that lies inside brush bounds.
+    """
     if not bounds:
         return filtered_df
     e0, e1 = bounds["energy"]
@@ -597,6 +740,14 @@ def _compute_selected_df(filtered_df, bounds):
 
 
 def _df_from_filtered_index(filtered_index_data):
+    """Materialize a DataFrame from stored filtered index data.
+
+    Args:
+        filtered_index_data: Stored filtered row indexes.
+
+    Returns:
+        pandas.DataFrame: DataFrame corresponding to stored row indexes.
+    """
     idx = list(filtered_index_data or [])
     if not idx:
         return data.iloc[0:0]
@@ -604,10 +755,26 @@ def _df_from_filtered_index(filtered_index_data):
 
 
 def _selected_index_key(selected_index_data):
+    """Convert selected row indexes into a hashable cache key.
+
+    Args:
+        selected_index_data: Stored selected row indexes.
+
+    Returns:
+        tuple[int, ...]: Tuple key suitable for memoization.
+    """
     return tuple(int(i) for i in (selected_index_data or []))
 
 
 def _build_pool_from_ids(pool_ids):
+    """Build a candidate similarity pool DataFrame from track ids.
+
+    Args:
+        pool_ids: Track ids used to build a similarity pool.
+
+    Returns:
+        pandas.DataFrame: Candidate pool containing rows for the given track ids.
+    """
     if not pool_ids:
         return data.iloc[0:0]
     rows = _track_id_idx.loc[list(pool_ids)]
@@ -618,6 +785,14 @@ def _build_pool_from_ids(pool_ids):
 
 @lru_cache(maxsize=128)
 def _pool_track_ids_from_selected_index_cached(selected_index_tuple):
+    """Compute and cache unique track ids for selected row indexes.
+
+    Args:
+        selected_index_tuple: Tuple of selected row indexes.
+
+    Returns:
+        tuple[str, ...]: Unique track ids for selected rows.
+    """
     if not selected_index_tuple:
         return tuple()
     idx = [int(i) for i in selected_index_tuple]
@@ -628,6 +803,15 @@ def _pool_track_ids_from_selected_index_cached(selected_index_tuple):
 
 
 def _compute_similar_records_from_pool(pool_df, track_id_str):
+    """Rank similar lower-popularity tracks from a candidate pool.
+
+    Args:
+        pool_df: Candidate pool DataFrame for similarity ranking.
+        track_id_str: Normalized reference track id.
+
+    Returns:
+        dict: Similar-track computation result with status and payload.
+    """
     required = [
         "track_id", "track_name", "artists", "track_genre", "popularity",
         "energy", "valence", "danceability", *NORM_FEATURES
@@ -684,18 +868,43 @@ def _compute_similar_records_from_pool(pool_df, track_id_str):
 
 @lru_cache(maxsize=64)
 def _compute_similar_records_cached(track_id_str, pool_ids_tuple):
+    """Compute cached similar-track results for a track and pool key.
+
+    Args:
+        track_id_str: Normalized reference track id.
+        pool_ids_tuple: Input value used by this callback/helper.
+
+    Returns:
+        dict: Cached similar-track computation result.
+    """
     pool_df = _build_pool_from_ids(pool_ids_tuple)
     return _compute_similar_records_from_pool(pool_df, track_id_str)
 
 
 @lru_cache(maxsize=96)
 def _genre_bar_spec_cached(selected_index_key):
+    """Build and cache the top-genre chart specification.
+
+    Args:
+        selected_index_key: Hashable selected-index cache key.
+
+    Returns:
+        dict: Vega-Lite specification for the genre bar chart.
+    """
     df = _df_from_filtered_index(selected_index_key)
     return make_genre_bar(df, top_n=10, width=320, height=352, swap_axes=True).to_dict()
 
 
 @lru_cache(maxsize=96)
 def _distribution_spec_cached(selected_index_key):
+    """Build and cache the feature-distribution chart specification.
+
+    Args:
+        selected_index_key: Hashable selected-index cache key.
+
+    Returns:
+        dict: Vega-Lite specification for the feature distribution chart.
+    """
     df = _df_from_filtered_index(selected_index_key)
     # Heavier chart on Render: use lower sampling cap for smoother first paint/interactions.
     return make_distribution(df, max_points=1200, width=320, height=330, swap_axes=False).to_dict()
@@ -703,24 +912,56 @@ def _distribution_spec_cached(selected_index_key):
 
 @lru_cache(maxsize=96)
 def _audio_profile_spec_cached(selected_index_key):
+    """Build and cache the average-audio-profile chart specification.
+
+    Args:
+        selected_index_key: Hashable selected-index cache key.
+
+    Returns:
+        dict: Vega-Lite specification for the average audio profile chart.
+    """
     df = _df_from_filtered_index(selected_index_key)
     return make_audio_profile(df, width=320, height=352, swap_axes=True).to_dict()
 
 
 @lru_cache(maxsize=96)
 def _tempo_distribution_spec_cached(selected_index_key):
+    """Build and cache the tempo-distribution chart specification.
+
+    Args:
+        selected_index_key: Hashable selected-index cache key.
+
+    Returns:
+        dict: Vega-Lite specification for the tempo distribution chart.
+    """
     df = _df_from_filtered_index(selected_index_key)
     return make_tempo_distribution(df, width=320, height=264).to_dict()
 
 
 @lru_cache(maxsize=96)
 def _mood_quadrant_spec_cached(selected_index_key):
+    """Build and cache the mood-quadrant chart specification.
+
+    Args:
+        selected_index_key: Hashable selected-index cache key.
+
+    Returns:
+        dict: Vega-Lite specification for the mood quadrant chart.
+    """
     df = _df_from_filtered_index(selected_index_key)
     return make_mood_quadrant(df, width=320, height=275).to_dict()
 
 
 @lru_cache(maxsize=96)
 def _popularity_hist_spec_cached(selected_index_key):
+    """Build and cache the popularity histogram chart specification.
+
+    Args:
+        selected_index_key: Hashable selected-index cache key.
+
+    Returns:
+        dict: Vega-Lite specification for the popularity histogram.
+    """
     df = _df_from_filtered_index(selected_index_key)
     if df is None or len(df) == 0 or "popularity" not in df.columns:
         chart = (
@@ -1466,6 +1707,18 @@ app.layout = html.Div(
     prevent_initial_call=True,
 )
 def handle_hint_popups(_btn_clicks, layout_ts, class_names, btn_ids, btn_timestamps):
+    """Open or close contextual help popups based on click source.
+
+    Args:
+        _btn_clicks: Hint-button click counts (unused directly).
+        layout_ts: Timestamp for clicks on the layout background.
+        class_names: Current class names for hint toggle wrappers.
+        btn_ids: Dash ids for hint-toggle buttons.
+        btn_timestamps: Click timestamps for hint-toggle buttons.
+
+    Returns:
+        list[str]: Updated class names for all hint toggle components.
+    """
     if not class_names:
         return []
 
@@ -1514,6 +1767,16 @@ def handle_hint_popups(_btn_clicks, layout_ts, class_names, btn_ids, btn_timesta
     prevent_initial_call=True,
 )
 def update_selected_genres_store(picked_genre, _remove_clicks, current_selected):
+    """Update selected genres from dropdown picks or chip removals.
+
+    Args:
+        picked_genre: Genre selected in the genre dropdown.
+        _remove_clicks: Chip-remove button click counts.
+        current_selected: Current selected-track payload.
+
+    Returns:
+        tuple[list[str], None]: Updated selected genres and cleared picker value.
+    """
     selected = list(current_selected or [])
     triggered = ctx.triggered_id
 
@@ -1536,6 +1799,15 @@ def update_selected_genres_store(picked_genre, _remove_clicks, current_selected)
     prevent_initial_call=True,
 )
 def toggle_filter_panel(_n_clicks, is_open):
+    """Toggle the collapsed state of the filter panel.
+
+    Args:
+        _n_clicks: Click count from the filter toggle button.
+        is_open: Current filter-panel open state.
+
+    Returns:
+        bool: Next open/closed state of the filter panel.
+    """
     return not bool(is_open)
 
 
@@ -1546,6 +1818,14 @@ def toggle_filter_panel(_n_clicks, is_open):
     Input("filter-panel-open-store", "data"),
 )
 def render_filter_panel_state(is_open):
+    """Render filter panel class and toggle button affordances.
+
+    Args:
+        is_open: Current filter-panel open state.
+
+    Returns:
+        tuple[str, str, str]: Panel class, toggle text, and toggle title.
+    """
     if is_open:
         return "left-panel open", "‹", "Collapse filters"
     return "left-panel", "›", "Expand filters"
@@ -1571,6 +1851,14 @@ def render_filter_panel_state(is_open):
     prevent_initial_call=True,
 )
 def reset_all_controls(n_clicks):
+    """Reset dashboard controls and stores to their default state.
+
+    Args:
+        n_clicks: Click count from the reset button.
+
+    Returns:
+        tuple: Reset values for controls and persistent stores.
+    """
     if not n_clicks:
         return (
             no_update,
@@ -1620,6 +1908,20 @@ def reset_all_controls(n_clicks):
     prevent_initial_call=True,
 )
 def choose_insights_detail(_genre_clicks, _audio_clicks, _density_clicks, _genre_mix_clicks, _pop_hist_clicks, _delta_clicks, current_value):
+    """Toggle which Insights detail card is active.
+
+    Args:
+        _genre_clicks: Click count for the genre detail button.
+        _audio_clicks: Click count for the audio detail button.
+        _density_clicks: Click count for the density detail button.
+        _genre_mix_clicks: Click count for the genre-mix detail button.
+        _pop_hist_clicks: Click count for the popularity-histogram detail button.
+        _delta_clicks: Click count for the mood-quadrant detail button.
+        current_value: Current selected value in the target control.
+
+    Returns:
+        str | None | dash.no_update: Next active detail key, clear signal, or no_update.
+    """
     trig = ctx.triggered_id
     mapping = {
         "show-genre-card-btn": "genre",
@@ -1645,6 +1947,14 @@ def choose_insights_detail(_genre_clicks, _audio_clicks, _density_clicks, _genre
     Input("insights-detail-store", "data"),
 )
 def render_insights_detail_cards(active_detail):
+    """Render style dictionaries for Insights detail card visibility.
+
+    Args:
+        active_detail: Currently active insights detail key.
+
+    Returns:
+        tuple[dict, dict, dict, dict, dict, dict]: Style dictionaries for all detail cards.
+    """
     popup_base = {
         "width": "100%",
         "boxShadow": "0 4px 14px rgba(0,0,0,0.12)",
@@ -1683,6 +1993,14 @@ def render_insights_detail_cards(active_detail):
     Input("selected-genres-store", "data"),
 )
 def render_selected_genres_box(selected_genres):
+    """Render selected genre chips in the filter panel.
+
+    Args:
+        selected_genres: Input value used by this callback/helper.
+
+    Returns:
+        dash.development.base_component.Component: Genre-chip container element.
+    """
     selected = list(selected_genres or [])
     if not selected:
         return html.Div("No genres selected.", style={"fontSize": "12px", "color": "#9aa1ab"})
@@ -1740,6 +2058,20 @@ def render_selected_genres_box(selected_genres):
     Input("liked-tracks-store", "data"),
 )
 def update_filtered_index_store(keyword, genre_values, explicit_mode, liked_filter_values, tempo_bounds, pop_bounds, liked_tracks):
+    """Update the filtered-index store from current filter inputs.
+
+    Args:
+        keyword: Keyword filter from the search box.
+        genre_values: Selected genres from filter controls.
+        explicit_mode: Explicit-content filter mode.
+        liked_filter_values: Liked-only checklist values.
+        tempo_bounds: Selected tempo range bounds.
+        pop_bounds: Selected popularity range bounds.
+        liked_tracks: Stored liked track ids.
+
+    Returns:
+        list[int]: Row indexes for the filtered dataset.
+    """
     filtered_df = _compute_filtered_df(
         keyword,
         genre_values,
@@ -1773,6 +2105,18 @@ def update_scatter_and_stores(
     previous_bounds,
     previous_selected_index,
 ):
+    """Update scatter spec and selection-related stores.
+
+    Args:
+        mode: Scatter interaction mode (brush or pan).
+        filtered_index_data: Stored filtered row indexes.
+        signal_data: Vega signal payload emitted by the scatter chart.
+        previous_bounds: Previous brush bounds stored in Dash state.
+        previous_selected_index: Previously stored selected indexes.
+
+    Returns:
+        tuple: Scatter spec plus related UI/store updates.
+    """
     triggered = ctx.triggered_id
 
     # Perf guard: point-click only updates Track Profile via another callback.
@@ -1871,6 +2215,15 @@ def update_scatter_and_stores(
     Input("insights-detail-store", "data"),
 )
 def update_genre_bar(selected_index_data, _active_detail):
+    """Update the top-genre chart when its card is active.
+
+    Args:
+        selected_index_data: Stored selected row indexes.
+        _active_detail: Active detail key used to gate chart updates.
+
+    Returns:
+        dict | dash.no_update: Genre chart spec when active; otherwise no_update.
+    """
     if _active_detail != "genre":
         return no_update
     return _genre_bar_spec_cached(_selected_index_key(selected_index_data))
@@ -1882,6 +2235,15 @@ def update_genre_bar(selected_index_data, _active_detail):
     Input("insights-detail-store", "data"),
 )
 def update_distribution(selected_index_data, _active_detail):
+    """Update the feature-distribution chart when its card is active.
+
+    Args:
+        selected_index_data: Stored selected row indexes.
+        _active_detail: Active detail key used to gate chart updates.
+
+    Returns:
+        dict | dash.no_update: Distribution chart spec when active; otherwise no_update.
+    """
     if _active_detail != "density":
         return no_update
     return _distribution_spec_cached(_selected_index_key(selected_index_data))
@@ -1893,6 +2255,15 @@ def update_distribution(selected_index_data, _active_detail):
     Input("insights-detail-store", "data"),
 )
 def update_audio_profile(selected_index_data, _active_detail):
+    """Update the average-audio-profile chart when its card is active.
+
+    Args:
+        selected_index_data: Stored selected row indexes.
+        _active_detail: Active detail key used to gate chart updates.
+
+    Returns:
+        dict | dash.no_update: Audio-profile spec when active; otherwise no_update.
+    """
     if _active_detail != "audio":
         return no_update
     return _audio_profile_spec_cached(_selected_index_key(selected_index_data))
@@ -1904,6 +2275,15 @@ def update_audio_profile(selected_index_data, _active_detail):
     Input("insights-detail-store", "data"),
 )
 def update_tempo_distribution(selected_index_data, _active_detail):
+    """Update the tempo-distribution chart when its card is active.
+
+    Args:
+        selected_index_data: Stored selected row indexes.
+        _active_detail: Active detail key used to gate chart updates.
+
+    Returns:
+        dict | dash.no_update: Tempo chart spec when active; otherwise no_update.
+    """
     if _active_detail != "genre_mix":
         return no_update
     return _tempo_distribution_spec_cached(_selected_index_key(selected_index_data))
@@ -1915,6 +2295,15 @@ def update_tempo_distribution(selected_index_data, _active_detail):
     Input("insights-detail-store", "data"),
 )
 def update_popularity_histogram(selected_index_data, _active_detail):
+    """Update the popularity histogram when its card is active.
+
+    Args:
+        selected_index_data: Stored selected row indexes.
+        _active_detail: Active detail key used to gate chart updates.
+
+    Returns:
+        dict | dash.no_update: Histogram spec when active; otherwise no_update.
+    """
     if _active_detail != "pop_hist":
         return no_update
     return _popularity_hist_spec_cached(_selected_index_key(selected_index_data))
@@ -1926,6 +2315,15 @@ def update_popularity_histogram(selected_index_data, _active_detail):
     Input("insights-detail-store", "data"),
 )
 def update_mood_quadrant(selected_index_data, _active_detail):
+    """Update the mood-quadrant chart when its card is active.
+
+    Args:
+        selected_index_data: Stored selected row indexes.
+        _active_detail: Active detail key used to gate chart updates.
+
+    Returns:
+        dict | dash.no_update: Mood-quadrant spec when active; otherwise no_update.
+    """
     if _active_detail != "delta":
         return no_update
     return _mood_quadrant_spec_cached(_selected_index_key(selected_index_data))
@@ -1937,6 +2335,15 @@ def update_mood_quadrant(selected_index_data, _active_detail):
     Input("liked-tracks-store", "data"),
 )
 def update_song_list(selected_index_data, liked_tracks):
+    """Render the track list table for the current selection.
+
+    Args:
+        selected_index_data: Stored selected row indexes.
+        liked_tracks: Stored liked track ids.
+
+    Returns:
+        dash.development.base_component.Component: Song table component for the selected rows.
+    """
     df = _df_from_filtered_index(selected_index_data)
     if df is None or len(df) == 0:
         # Keep `song-table` mounted even when empty so callbacks that depend on
@@ -1956,6 +2363,19 @@ def update_song_list(selected_index_data, liked_tracks):
     prevent_initial_call=True,
 )
 def toggle_liked_tracks(active_cell, _similar_like_clicks, _profile_like_clicks, viewport_data, table_data, liked_tracks):
+    """Toggle liked-track state from table and card interactions.
+
+    Args:
+        active_cell: Active cell payload from the song table.
+        _similar_like_clicks: Click counts for similar-track like buttons.
+        _profile_like_clicks: Click counts for profile like buttons.
+        viewport_data: Visible rows in the current song-table viewport.
+        table_data: Song-table row data fallback.
+        liked_tracks: Stored liked track ids.
+
+    Returns:
+        list[str] | dash.no_update: Updated liked track ids or no_update.
+    """
     liked = [str(x) for x in (liked_tracks or [])]
     triggered = ctx.triggered_id
 
@@ -1995,6 +2415,19 @@ def toggle_liked_tracks(active_cell, _similar_like_clicks, _profile_like_clicks,
     prevent_initial_call=True,
 )
 def update_selected_track(signal_data, active_cell, _similar_open_clicks, viewport_data, table_data, current_selected):
+    """Update the selected-track store from scatter, table, or similar-list events.
+
+    Args:
+        signal_data: Vega signal payload emitted by the scatter chart.
+        active_cell: Active cell payload from the song table.
+        _similar_open_clicks: Click counts for similar-track open buttons.
+        viewport_data: Visible rows in the current song-table viewport.
+        table_data: Song-table row data fallback.
+        current_selected: Current selected-track payload.
+
+    Returns:
+        dict | dash.no_update: Selected track payload or no_update when unchanged.
+    """
     triggered = ctx.triggered_id
     track_id = None
     source = None
@@ -2061,6 +2494,16 @@ def update_selected_track(signal_data, active_cell, _similar_open_clicks, viewpo
     prevent_initial_call=True,
 )
 def toggle_compare_mode(_n, compare_mode, selected_track):
+    """Toggle compare mode and manage the locked reference track.
+
+    Args:
+        _n: Click count from compare toggle button.
+        compare_mode: Current compare-mode state.
+        selected_track: Current selected-track payload.
+
+    Returns:
+        tuple[bool | dash.no_update, dict | None | dash.no_update]: Compare state and locked track payload.
+    """
     is_on = bool(compare_mode)
     if not is_on:
         track_id = str((selected_track or {}).get("track_id", "")).strip()
@@ -2076,6 +2519,14 @@ def toggle_compare_mode(_n, compare_mode, selected_track):
     Input("compare-mode-store", "data"),
 )
 def render_compare_button(compare_mode):
+    """Render compare-toggle button label and style.
+
+    Args:
+        compare_mode: Current compare-mode state.
+
+    Returns:
+        tuple[str, dict]: Button label and inline style for compare state.
+    """
     is_on = bool(compare_mode)
     base = {
         "border": "1px solid #dbe5df",
@@ -2099,6 +2550,15 @@ def render_compare_button(compare_mode):
     State("main-view-prev-store", "data"),
 )
 def animate_main_tabs(current_tab, prev_tab):
+    """Apply entry animation classes when switching main tabs.
+
+    Args:
+        current_tab: Currently selected main tab value.
+        prev_tab: Previously selected main tab value.
+
+    Returns:
+        tuple[str, str, str]: Updated previous tab and class names for both tab panes.
+    """
     prev = str(prev_tab or "")
     curr = str(current_tab or "")
 
@@ -2128,6 +2588,18 @@ def render_song_profile(
     locked_track,
     liked_tracks,
 ):
+    """Render the song profile panel and radar chart content.
+
+    Args:
+        selected_track: Current selected-track payload.
+        genre_color_map: Genre-to-color lookup map.
+        compare_mode: Current compare-mode state.
+        locked_track: Track payload locked for compare mode.
+        liked_tracks: Stored liked track ids.
+
+    Returns:
+        dash.development.base_component.Component: Profile panel content for the selected track.
+    """
     selected_id = str((selected_track or {}).get("track_id", "")).strip()
     locked_id = str((locked_track or {}).get("track_id", "")).strip()
     compare_on = bool(compare_mode)
@@ -2353,6 +2825,15 @@ def render_song_profile(
     State({"type": "profile-like", "track_id": ALL}, "id"),
 )
 def sync_profile_like_button(liked_tracks, profile_like_ids):
+    """Sync profile like-button icon and style with liked-track state.
+
+    Args:
+        liked_tracks: Stored liked track ids.
+        profile_like_ids: Ids for rendered profile like buttons.
+
+    Returns:
+        tuple[list[str], list[dict]]: Like-button symbols and style dictionaries.
+    """
     ids = list(profile_like_ids or [])
     if not ids:
         return [], []
@@ -2387,6 +2868,17 @@ def sync_profile_like_button(liked_tracks, profile_like_ids):
     prevent_initial_call=True,
 )
 def push_profile_track_to_similar(_clicks, selected_track, compare_mode, locked_track):
+    """Push the profile track into the similar-track dropdown.
+
+    Args:
+        _clicks: Click count from the profile similar-track button.
+        selected_track: Current selected-track payload.
+        compare_mode: Current compare-mode state.
+        locked_track: Track payload locked for compare mode.
+
+    Returns:
+        str | dash.no_update: Track id to set in dropdown or no_update.
+    """
     if _clicks in (None, 0):
         return no_update
     compare_on = bool(compare_mode)
@@ -2405,6 +2897,15 @@ def push_profile_track_to_similar(_clicks, selected_track, compare_mode, locked_
     prevent_initial_call=True,
 )
 def highlight_song_table_row(active_cell, columns):
+    """Highlight all visible cells for the active song-table row.
+
+    Args:
+        active_cell: Active cell payload from the song table.
+        columns: Song-table column metadata.
+
+    Returns:
+        list[dict] | dash.no_update: Selected-cell descriptors for active row highlighting.
+    """
     if not active_cell:
         return no_update
     row = active_cell.get("row")
@@ -2425,6 +2926,16 @@ def highlight_song_table_row(active_cell, columns):
     State("similar-track-dropdown", "value"),
 )
 def update_similar_dropdown(selected_index_data, search_value, current_value):
+    """Refresh similar-track dropdown options from selected rows.
+
+    Args:
+        selected_index_data: Stored selected row indexes.
+        search_value: Current search text in the similar-track dropdown.
+        current_value: Current selected value in the target control.
+
+    Returns:
+        tuple[list[dict], str | None]: Dropdown options and retained current value.
+    """
     selected_df = _df_from_filtered_index(selected_index_data)
     current_value_str = str(current_value) if current_value is not None else None
     if selected_df is None or len(selected_df) == 0:
@@ -2478,6 +2989,16 @@ def update_similar_dropdown(selected_index_data, search_value, current_value):
     Input("liked-tracks-store", "data"),
 )
 def update_similar_tracks(track_id, selected_index_data, liked_tracks):
+    """Render similar lower-popularity track cards for the selected reference track.
+
+    Args:
+        track_id: Reference track id.
+        selected_index_data: Stored selected row indexes.
+        liked_tracks: Stored liked track ids.
+
+    Returns:
+        dash.development.base_component.Component: Rendered similar-track content block.
+    """
     if not track_id:
         return html.Div(
             "Select a track above to discover audio-similar but underrated songs.",
