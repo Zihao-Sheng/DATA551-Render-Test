@@ -1,4 +1,6 @@
-﻿import sys
+﻿"""Dash application for interactive Spotify track exploration and comparison."""
+
+import sys
 import os
 from pathlib import Path
 from functools import lru_cache
@@ -260,6 +262,7 @@ def _extract_track_id_from_scatter_signal(signal_data):
                 break
 
     def _norm(v):
+        """Normalize scalar-or-list payload values into a non-empty string id."""
         if isinstance(v, (list, tuple)):
             if not v:
                 return None
@@ -270,6 +273,7 @@ def _extract_track_id_from_scatter_signal(signal_data):
         return s if s else None
 
     def _from_fields_values(fields, values):
+        """Extract `track_id` from Vega `fields`/`values` aligned arrays."""
         if not isinstance(fields, list):
             return None
         if not isinstance(values, list):
@@ -280,6 +284,7 @@ def _extract_track_id_from_scatter_signal(signal_data):
         return None
 
     def _walk(node):
+        """Recursively scan nested payload nodes to resolve a selected track id."""
         if isinstance(node, dict):
             if "track_id" in node and node["track_id"] is not None:
                 return _norm(node["track_id"])
@@ -354,6 +359,7 @@ def _extract_track_payload_from_scatter_signal(signal_data):
                 break
 
     def _norm(v):
+        """Normalize scalar-or-list payload values into a non-empty string id."""
         if isinstance(v, (list, tuple)):
             if not v:
                 return None
@@ -364,6 +370,7 @@ def _extract_track_payload_from_scatter_signal(signal_data):
         return s if s else None
 
     def _from_fields_values(fields, values):
+        """Map Vega `fields`/`values` arrays into known track metadata keys."""
         if not isinstance(fields, list) or not isinstance(values, list):
             return None
         mapping = {}
@@ -378,6 +385,7 @@ def _extract_track_payload_from_scatter_signal(signal_data):
         return None
 
     def _walk(node):
+        """Recursively scan nested payload nodes to resolve a selected track id."""
         if isinstance(node, dict):
             if (node.get("_row_id") is not None) or (node.get("track_id") is not None):
                 payload = {
@@ -1765,6 +1773,7 @@ def handle_hint_popups(_btn_clicks, layout_ts, class_names, btn_ids, btn_timesta
         return []
 
     def _base_class(c):
+        """Return hint-toggle base classes without transient animation tokens."""
         class_tokens = [t for t in str(c or "hint-toggle").split() if t and t not in ("is-open", "is-closing")]
         return " ".join(class_tokens) if class_tokens else "hint-toggle"
 
@@ -3183,3 +3192,4 @@ def update_similar_tracks(track_id, selected_index_data, liked_tracks):
 
 if __name__ == "__main__":
     app.run(debug=_is_truthy(os.getenv("DASH_DEBUG")))
+

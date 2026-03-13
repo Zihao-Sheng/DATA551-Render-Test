@@ -1,4 +1,4 @@
-# filters.py
+"""Filtering utilities for keyword, genre, tempo, popularity, and explicit flags."""
 from __future__ import annotations
 import pandas as pd
 from typing import Iterable, Optional, Set, Tuple, Union
