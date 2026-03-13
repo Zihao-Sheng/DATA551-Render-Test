@@ -424,6 +424,60 @@ def _extract_track_payload_from_scatter_signal(signal_data):
     return _walk(signal_data)
 
 
+def _extract_track_payload_from_plotly_click(click_data):
+    """Extract selected track metadata from Plotly click payloads."""
+    if not isinstance(click_data, dict):
+        return None
+    points = click_data.get("points") or []
+    if not points:
+        return None
+    point = points[0] or {}
+    custom = point.get("customdata")
+    if isinstance(custom, (list, tuple)) and len(custom) >= 5:
+        return {
+            "_row_id": str(custom[0]).strip() if custom[0] is not None else None,
+            "track_id": str(custom[1]).strip() if custom[1] is not None else None,
+            "track_name": str(custom[2]).strip() if custom[2] is not None else None,
+            "artists": str(custom[3]).strip() if custom[3] is not None else None,
+            "track_genre": str(custom[4]).strip() if custom[4] is not None else None,
+        }
+    track_id = point.get("id")
+    if track_id is None:
+        return None
+    return {"track_id": str(track_id).strip()}
+
+
+def _extract_brush_bounds_from_plotly_selected(selected_data):
+    """Extract brush bounds from Plotly selectedData payload."""
+    if not isinstance(selected_data, dict):
+        return None
+
+    rng = selected_data.get("range")
+    if isinstance(rng, dict):
+        xr = rng.get("x") or rng.get("xaxis")
+        yr = rng.get("y") or rng.get("yaxis")
+        if isinstance(xr, (list, tuple)) and len(xr) == 2 and isinstance(yr, (list, tuple)) and len(yr) == 2:
+            try:
+                e0, e1 = float(xr[0]), float(xr[1])
+                v0, v1 = float(yr[0]), float(yr[1])
+                return {"energy": [min(e0, e1), max(e0, e1)], "valence": [min(v0, v1), max(v0, v1)]}
+            except Exception:
+                return None
+
+    lasso = selected_data.get("lassoPoints")
+    if isinstance(lasso, dict):
+        xs = lasso.get("x") or []
+        ys = lasso.get("y") or []
+        if isinstance(xs, list) and isinstance(ys, list) and xs and ys:
+            try:
+                xf = [float(v) for v in xs]
+                yf = [float(v) for v in ys]
+                return {"energy": [min(xf), max(xf)], "valence": [min(yf), max(yf)]}
+            except Exception:
+                return None
+    return None
+
+
 def _get_track_row_by_index(row_index):
     """Fetch a track row by DataFrame index and coerce numeric fields.
 
@@ -1520,33 +1574,21 @@ app.layout = html.Div(
                                                                 ],
                                                             ),
                                                             html.Div(
-                                                                dvc.Vega(
+                                                                dcc.Graph(
                                                                     id="scatter",
-                                                                    spec={},
-                                                                    opt={"renderer": "svg", "actions": False},
-                                                                    signalsToObserve=[
-                                                                        "brush_selection",
-                                                                        "track_pick",
-                                                                        "track_pick_tuple",
-                                                                        "track_pick_toggle",
-                                                                        "track_pick_modify",
-                                                                        "track_pick_store",
-                                                                    ],
-                                                                    style={
-                                                                        "width": "100%",
-                                                                        "height": "100%",
-                                                                        "display": "block",
-                                                                        "minWidth": 0,
-                                                                        "alignSelf": "flex-start",
+                                                                    figure={},
+                                                                    config={
+                                                                        "displayModeBar": False,
+                                                                        "scrollZoom": False,
+                                                                        "doubleClick": "reset",
                                                                     },
+                                                                    style={"display": "inline-block"},
                                                                 ),
                                                                 style={
-                                                                    "display": "flex",
-                                                                    "justifyContent": "flex-start",
-                                                                    "alignItems": "flex-start",
+                                                                    "display": "block",
                                                                     "width": "100%",
-                                                                    "aspectRatio": "5 / 4",
                                                                     "paddingBottom": "10px",
+                                                                    "overflowX": "hidden",
                                                                 },
                                                             ),
                                                         ],
@@ -2085,7 +2127,7 @@ def update_filtered_index_store(keyword, genre_values, explicit_mode, liked_filt
 
 
 @callback(
-    Output("scatter", "spec"),
+    Output("scatter", "figure"),
     Output("scatter-meta", "children"),
     Output("header-stats", "children"),
     Output("filter-hint", "children"),
@@ -2094,59 +2136,66 @@ def update_filtered_index_store(keyword, genre_values, explicit_mode, liked_filt
     Output("scatter-genre-color-map-store", "data"),
     Input("toolbox-mode", "value"),
     Input("filtered-index-store", "data"),
-    Input("scatter", "signalData"),
+    Input("scatter", "selectedData"),
+    Input("scatter", "clickData"),
     State("brush-bounds-store", "data"),
     State("selected-index-store", "data"),
 )
 def update_scatter_and_stores(
     mode,
     filtered_index_data,
-    signal_data,
+    selected_data,
+    click_data,
     previous_bounds,
     previous_selected_index,
 ):
-    """Update scatter spec and selection-related stores.
+    """Update scatter figure and selection-related stores.
 
     Args:
         mode: Scatter interaction mode (brush or pan).
         filtered_index_data: Stored filtered row indexes.
-        signal_data: Vega signal payload emitted by the scatter chart.
+        selected_data: Plotly selectedData payload emitted by scatter brushing.
+        click_data: Plotly clickData payload emitted by scatter point clicks.
         previous_bounds: Previous brush bounds stored in Dash state.
         previous_selected_index: Previously stored selected indexes.
 
     Returns:
-        tuple: Scatter spec plus related UI/store updates.
+        tuple: Scatter figure plus related UI/store updates.
     """
     triggered = ctx.triggered_id
-
-    # Perf guard: point-click only updates Track Profile via another callback.
-    # Skip expensive filter/chart work when scatter event has no brush payload.
-    if triggered == "scatter":
-        payload = signal_data or {}
-        brush_payload = payload.get("brush_selection")
-        point_payload = payload.get("track_pick")
-        if point_payload is None:
-            for k, v in payload.items():
-                if isinstance(k, str) and "track_pick" in k:
-                    point_payload = v
-                    break
-        # Only short-circuit on pure point-pick events.
-        # Keep initial render and brush interactions intact.
-        if (point_payload is not None) and (not brush_payload):
-            return no_update, no_update, no_update, no_update, previous_bounds, no_update, no_update
+    triggered_prop = (ctx.triggered[0] or {}).get("prop_id", "") if ctx.triggered else ""
 
     filtered_df = _df_from_filtered_index(filtered_index_data)
 
-    brush = (signal_data or {}).get("brush_selection")
-    if brush and "energy" in brush and "valence" in brush:
-        e0, e1 = brush["energy"]
-        v0, v1 = brush["valence"]
-        bounds = {"energy": [e0, e1], "valence": [v0, v1]}
+    click_clears_brush = False
+    if (
+        triggered == "scatter"
+        and triggered_prop.endswith(".clickData")
+        and mode == "brush"
+        and isinstance(previous_bounds, dict)
+        and click_data
+    ):
+        points = (click_data or {}).get("points") or []
+        p = points[0] if points else {}
+        try:
+            x = float((p or {}).get("x"))
+            y = float((p or {}).get("y"))
+            eb = previous_bounds.get("energy") or []
+            vb = previous_bounds.get("valence") or []
+            if len(eb) == 2 and len(vb) == 2:
+                e0, e1 = float(eb[0]), float(eb[1])
+                v0, v1 = float(vb[0]), float(vb[1])
+                inside = (min(e0, e1) <= x <= max(e0, e1)) and (min(v0, v1) <= y <= max(v0, v1))
+                click_clears_brush = not inside
+        except Exception:
+            click_clears_brush = False
+
+    bounds = None if click_clears_brush else (_extract_brush_bounds_from_plotly_selected(selected_data) if mode == "brush" else None)
+    if bounds:
         selected_df = _compute_selected_df(filtered_df, bounds)
     else:
         # Clearing brush should immediately clear selection:
         # selected set falls back to all filtered tracks.
-        bounds = None
         selected_df = filtered_df
 
     n_total = len(data)
@@ -2178,8 +2227,10 @@ def update_scatter_and_stores(
         ("Brush to select a region" if mode == "brush" else "Pan & zoom enabled")
     )
 
-    if triggered == "scatter" and signal_data:
-        spec_out = no_update
+    if (not click_clears_brush) and triggered == "scatter" and (
+        triggered_prop.endswith(".selectedData") or triggered_prop.endswith(".clickData")
+    ):
+        fig_out = no_update
         genre_color_map_out = no_update
     else:
         scatter_max_points = 450 if n_filtered > 60000 else 500
@@ -2190,10 +2241,10 @@ def update_scatter_and_stores(
             topk_genres=10,
             selection_name="brush_selection",
             point_selection_name="track_pick",
-            width="container",
-            height="container",
+            width=520,
+            height=520,
         )
-        spec_out = chart.to_dict()
+        fig_out = chart
         genre_color_map_out = _build_genre_color_map(scatter_meta.get("top_genres", []))
         bounds = None
         selected_df = filtered_df
@@ -2206,7 +2257,7 @@ def update_scatter_and_stores(
     else:
         bounds_out = bounds
 
-    return spec_out, meta_text, stats_children, filter_hint, bounds_out, selected_out, genre_color_map_out
+    return fig_out, meta_text, stats_children, filter_hint, bounds_out, selected_out, genre_color_map_out
 
 
 @callback(
@@ -2406,7 +2457,7 @@ def toggle_liked_tracks(active_cell, _similar_like_clicks, _profile_like_clicks,
 
 @callback(
     Output("selected-track-store", "data"),
-    Input("scatter", "signalData"),
+    Input("scatter", "clickData"),
     Input("song-table", "active_cell"),
     Input({"type": "similar-open", "track_id": ALL}, "n_clicks"),
     State("song-table", "derived_viewport_data"),
@@ -2414,11 +2465,11 @@ def toggle_liked_tracks(active_cell, _similar_like_clicks, _profile_like_clicks,
     State("selected-track-store", "data"),
     prevent_initial_call=True,
 )
-def update_selected_track(signal_data, active_cell, _similar_open_clicks, viewport_data, table_data, current_selected):
+def update_selected_track(click_data, active_cell, _similar_open_clicks, viewport_data, table_data, current_selected):
     """Update the selected-track store from scatter, table, or similar-list events.
 
     Args:
-        signal_data: Vega signal payload emitted by the scatter chart.
+        click_data: Plotly clickData payload emitted by the scatter chart.
         active_cell: Active cell payload from the song table.
         _similar_open_clicks: Click counts for similar-track open buttons.
         viewport_data: Visible rows in the current song-table viewport.
@@ -2453,7 +2504,7 @@ def update_selected_track(signal_data, active_cell, _similar_open_clicks, viewpo
                 }
                 source = "song-table"
     elif triggered == "scatter":
-        extracted = _extract_track_payload_from_scatter_signal(signal_data) or {}
+        extracted = _extract_track_payload_from_plotly_click(click_data) or {}
         row_id = str(extracted.get("_row_id", "")).strip()
         row_from_idx = _get_track_row_by_index(row_id) if row_id else None
         if row_from_idx is not None:
