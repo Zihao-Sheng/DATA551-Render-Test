@@ -1,3 +1,5 @@
+"""Mood quadrant chart builders for energy-valence heatmap summaries."""
+
 import altair as alt
 import pandas as pd
 
@@ -8,6 +10,16 @@ def make_mood_quadrant(
     width: int = 290,
     height: int = 250,
 ):
+    """Build a binned energy/valence heatmap with per-cell track counts.
+
+    Args:
+        df: Input track rows containing ``energy`` and ``valence`` columns.
+        width: Target chart width in pixels.
+        height: Target chart height in pixels.
+
+    Returns:
+        alt.Chart: Configured Altair heatmap chart.
+    """
     required = {"energy", "valence"}
     if df is None or len(df) == 0 or not required.issubset(df.columns):
         return (

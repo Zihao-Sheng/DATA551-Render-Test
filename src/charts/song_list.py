@@ -1,4 +1,5 @@
-# charts/song_list.py
+"""Song-table builders for interactive track list rendering."""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -12,21 +13,15 @@ def make_song_list_table(
     max_rows: int = 5000,
     liked_track_ids: list[str] | None = None,
 ) -> dash_table.DataTable:
-    """
-    Create a sortable Dash DataTable for track listing.
+    """Create a sortable Dash DataTable for track listing.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input dataset (already filtered/selected).
-    max_rows : int
-        Limit rows rendered for performance.
-    table_height_px : int
-        Fixed height with vertical scroll.
+    Args:
+        df: Input dataset after filtering and selection.
+        max_rows: Maximum number of rows rendered for table performance.
+        liked_track_ids: Track ids currently marked as liked by the user.
 
-    Returns
-    -------
-    dash_table.DataTable
+    Returns:
+        dash_table.DataTable: Configured song-list table component.
     """
     # Choose columns (only keep what you want to show)
     # Adjust these names if your dataset uses different ones.

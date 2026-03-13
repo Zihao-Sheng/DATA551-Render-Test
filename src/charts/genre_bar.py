@@ -1,3 +1,5 @@
+"""Genre bar chart builders for popularity and energy comparisons."""
+
 import altair as alt
 import pandas as pd
 
@@ -10,6 +12,18 @@ def make_genre_bar(
     height: int = 300,
     swap_axes: bool = False,
 ):
+    """Create a top-genre popularity bar chart with energy-based coloring.
+
+    Args:
+        df: Input track rows containing genre, popularity, and feature columns.
+        top_n: Number of genres to keep by average popularity.
+        width: Target chart width in pixels.
+        height: Target chart height in pixels.
+        swap_axes: When True, render horizontal bars instead of vertical bars.
+
+    Returns:
+        alt.Chart: Configured Altair bar chart.
+    """
     if df is None or len(df) == 0:
         return (
             alt.Chart(pd.DataFrame({"track_genre": [], "avg_popularity": []}))
