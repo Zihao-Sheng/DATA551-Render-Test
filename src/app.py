@@ -1156,7 +1156,7 @@ app.layout = html.Div(
                                                             "display": "grid",
                                                             "gridTemplateColumns": "33% 67%",
                                                             "gap": "10px",
-                                                            "alignItems": "end",
+                                                            "alignItems": "start",
                                                             "minHeight": "561px",
                                                             "marginTop": "6px",
                                                         },
@@ -1291,14 +1291,20 @@ app.layout = html.Div(
                                                                         "track_pick_modify",
                                                                         "track_pick_store",
                                                                     ],
-                                                                    style={"width": "auto", "maxWidth": "100%", "display": "inline-block"},
+                                                                    style={
+                                                                        "width": "100%",
+                                                                        "height": "100%",
+                                                                        "display": "block",
+                                                                        "minWidth": 0,
+                                                                        "alignSelf": "flex-start",
+                                                                    },
                                                                 ),
                                                                 style={
                                                                     "display": "flex",
                                                                     "justifyContent": "flex-start",
-                                                                    "alignItems": "flex-end",
+                                                                    "alignItems": "flex-start",
                                                                     "width": "100%",
-                                                                    "minHeight": "561px",
+                                                                    "aspectRatio": "5 / 4",
                                                                     "paddingBottom": "10px",
                                                                 },
                                                             ),
@@ -1840,8 +1846,8 @@ def update_scatter_and_stores(
             topk_genres=10,
             selection_name="brush_selection",
             point_selection_name="track_pick",
-            width=470,
-            height=470,
+            width="container",
+            height="container",
         )
         spec_out = chart.to_dict()
         genre_color_map_out = _build_genre_color_map(scatter_meta.get("top_genres", []))
@@ -2605,7 +2611,3 @@ def update_similar_tracks(track_id, selected_index_data, liked_tracks):
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-
