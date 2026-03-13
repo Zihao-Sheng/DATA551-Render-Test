@@ -3182,4 +3182,4 @@ def update_similar_tracks(track_id, selected_index_data, liked_tracks):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=_is_truthy(os.getenv("DASH_DEBUG")))
